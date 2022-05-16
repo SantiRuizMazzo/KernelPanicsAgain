@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 rand = "0.8.5"
+chrono = "0.4.19"
+log = { version = "0.4.17", features = ["std", "serde"] }
