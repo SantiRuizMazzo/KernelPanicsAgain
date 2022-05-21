@@ -1,4 +1,6 @@
+use super::{peer::Peer, torrent_decoder::TorrentDecoder};
 use rand::Rng;
+
 pub struct ClientSide {
     pub peer_id: String,
 }
@@ -13,6 +15,10 @@ impl ClientSide {
         peer_id
     }
     pub fn new() -> ClientSide {
+        let _ = TorrentDecoder::decode("tests/sample.torrent");
+        let peer = Peer::new("hola".to_string(), "chau".to_string(), 0);
+        peer.print();
+
         ClientSide {
             peer_id: ClientSide::generate_peer_id(),
         }
@@ -32,7 +38,7 @@ mod tests {
     }
 
     #[test]
-    fn generate_correctly_sized_peer_id_inside_ClientSide_struct() {
+    fn generate_correctly_sized_peer_id_inside_clientside_struct() {
         let client = ClientSide::new();
         assert_eq!(20, client.peer_id.len() * std::mem::size_of::<u8>());
     }

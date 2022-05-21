@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+sha1 = "0.10.1"
 rand = "0.8.5"
 log = { version = "0.4.17", features = ["std", "serde"] }
 chrono = "0.4.19"
