@@ -10,4 +10,4 @@ sha1 = "0.10.1"
 rand = "0.8.5"
 log = { version = "0.4.17", features = ["std", "serde"] }
 chrono = "0.4.19"
-
+native-tls = "0.2.10"

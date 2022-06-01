@@ -1,4 +1,4 @@
-use super::{peer::Peer, torrent_decoder::TorrentDecoder};
+use super::{peer::Peer, torrent::Torrent};
 use crate::urlencoding::encode;
 use rand::Rng;
 
@@ -16,8 +16,12 @@ impl ClientSide {
         peer_id
     }
     pub fn new() -> ClientSide {
-        let _ = TorrentDecoder::decode("tests/sample.torrent");
-        let peer = Peer::new("hola".to_string(), "chau".to_string(), 0);
+        let torrent = Torrent::from("tests/ultramarine.torrent").unwrap();
+        let tracker_info = torrent
+            .get_tracker_info(*b"12345678901234567890", 6881)
+            .unwrap();
+        tracker_info.print();
+        let peer = Peer::new("chau".to_string(), 0);
         peer.print();
         let _ = encode("上海+中國");
 

@@ -1,0 +1,4 @@
+2022-06-01 20:09:10.835373377 -03:00 - Esto se mandó desde el thread
+2022-06-01 20:09:10.835596966 -03:00 - Esto también se mandó desde el thread
+2022-06-01 20:09:10.835676746 -03:00 - Este es un test de log
+2022-06-01 20:09:10.835750039 -03:00 - Este es otro de mis test de log

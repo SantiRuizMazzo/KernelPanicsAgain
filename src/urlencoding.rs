@@ -4,6 +4,8 @@ const PERIOD: u8 = 0x2e;
 const UNDERSCORE: u8 = 0x5f;
 const HYPHEN: u8 = 0x2d;
 const TILDE: u8 = 0x7e;
+const SPACE: u8 = 0x20;
+const PLUS_SIGN: char = '+';
 const ENCODING_CHAR: char = '%';
 
 /// Returns true if character representation of `byte` is in the set 0-9, a-z, A-Z, '.', '-', '_' or '~'.
@@ -23,9 +25,12 @@ pub fn encode<T: AsRef<[u8]>>(data: T) -> Result<String, Error> {
     let mut encoded = String::with_capacity(data.as_ref().len() * 2);
     const HEX_CHARS: &[u8] = b"0123456789ABCDEF";
 
-    for &byte in data.as_ref().iter() {
+    for &byte in data.as_ref() {
         if is_url_valid(byte) {
             encoded.write_char(byte as char)?;
+            continue;
+        } else if byte == SPACE {
+            encoded.write_char(PLUS_SIGN)?;
             continue;
         }
         encoded.write_char(ENCODING_CHAR)?;
@@ -41,10 +46,7 @@ mod tests {
 
     #[test]
     fn urlencoding_ascii_string() -> Result<(), Error> {
-        assert_eq!(
-            "%3F%20and%20the%20Mysterians",
-            encode("? and the Mysterians")?
-        );
+        assert_eq!("%3F+and+the+Mysterians", encode("? and the Mysterians")?);
         Ok(())
     }
 
