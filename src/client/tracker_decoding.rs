@@ -1,95 +1,80 @@
 use super::{
     super::{
         bdecoding::{BDecoder, BType},
-        utils::bytes_to_string,
+        utils,
     },
     peer::Peer,
     tracker_info::TrackerInfo,
 };
-use std::{
-    collections::HashMap,
-    io::{Error, ErrorKind},
-};
+use std::collections::HashMap;
 
-///
-
-pub fn tracker_info_from_bytes(bytes: Vec<u8>) -> Result<TrackerInfo, Error> {
-    let btype = BDecoder::bdecode(bytes)?;
-    get_tracker_info(btype)
-}
-
-///
-
-fn get_tracker_info(btype: BType) -> Result<TrackerInfo, Error> {
-    let body = match btype {
+pub fn tracker_info_from_bytes(bytes: Vec<u8>) -> Result<TrackerInfo, String> {
+    let body = match BDecoder::bdecode(bytes)? {
         BType::Dictionary(body) => body,
-        _ => return error("tracker response body is not a bencoded dictionary"),
+        _ => return Err("tracker response body is not a bencoded dictionary".to_string()),
     };
 
     let interval = match body.get("interval") {
-        Some(BType::Integer(interval)) => *interval,
-        _ => return error("interval key not present or has invalid value type"),
+        Some(BType::Integer(interval)) => *interval as u32,
+        _ => return Err("interval key not present or has invalid value type".to_string()),
     };
 
     let peers = match body.get("peers") {
-        Some(BType::List(peers)) => peer_list(peers)?,
-        Some(BType::String(peers)) => compact_peer_list(peers)?,
-        _ => return error("interval key not present or has invalid value type"),
+        Some(BType::List(peers)) => regular_peer_list(peers)?,
+        Some(BType::String(peers)) => compact_peer_list(peers),
+        _ => return Err("peers key not present or has invalid value type".to_string()),
     };
 
-    Ok(TrackerInfo::new(interval as u32, peers))
+    Ok(TrackerInfo::new(interval, peers))
 }
 
-///
-
-fn peer_list(btype_list: &[BType]) -> Result<Vec<Peer>, Error> {
-    let mut peer_list: Vec<Peer> = Vec::with_capacity(btype_list.len());
-    if btype_list.is_empty() {
-        return error("peer list does not have any peers");
+fn regular_peer_list(peers: &[BType]) -> Result<Vec<Peer>, String> {
+    let mut peer_list = Vec::with_capacity(peers.len());
+    for peer in peers {
+        match peer {
+            BType::Dictionary(peer_dict) => peer_list.push(peer_from_dict(peer_dict)?),
+            _ => return Err("some peer of the list is not a bencoded dictionary".to_string()),
+        }
     }
 
-    for btype in btype_list {
-        let peer = match btype {
-            BType::Dictionary(peer_dict) => peer_from_dict(peer_dict)?,
-            _ => return error("some peer of the list is not a bencoded dictionary"),
-        };
-        peer_list.push(peer);
+    if peer_list.is_empty() {
+        return Err("could not load any peers to the peers list".to_string());
     }
     Ok(peer_list)
 }
 
-///
+fn peer_from_dict(peer_dict: &HashMap<String, BType>) -> Result<Peer, String> {
+    let id = match peer_dict.get("peer id") {
+        Some(BType::String(id)) => peer_id_from_bytes(id),
+        _ => None,
+    };
 
-fn peer_from_dict(peer_dict: &HashMap<String, BType>) -> Result<Peer, Error> {
     let ip = match peer_dict.get("ip") {
-        Some(BType::String(ip)) => bytes_to_string(ip)?,
-        _ => return error("ip key not present in peer dictionary"),
+        Some(BType::String(ip)) => utils::bytes_to_string(ip)?,
+        _ => return Err("ip key not present in peer dictionary".to_string()),
     };
 
     let port = match peer_dict.get("port") {
-        Some(BType::Integer(port)) => *port,
-        _ => return error("port key not present in peer dictionary"),
+        Some(BType::Integer(port)) => *port as u32,
+        _ => return Err("port key not present in peer dictionary".to_string()),
     };
 
-    Ok(Peer::new(ip, port as u32))
+    Ok(Peer::new(id, ip, port))
 }
 
-///
+fn peer_id_from_bytes(peer_id: &[u8]) -> Option<[u8; 20]> {
+    if peer_id.len() != 20 {
+        return None;
+    }
+    peer_id.try_into().ok()
+}
 
-fn compact_peer_list(peers: &[u8]) -> Result<Vec<Peer>, Error> {
-    let mut peer_list: Vec<Peer> = Vec::with_capacity(peers.len() / 6);
-
+fn compact_peer_list(peers: &[u8]) -> Vec<Peer> {
+    let mut peer_list = Vec::with_capacity(peers.len() / 6);
     for peer in peers.chunks_exact(6) {
         let ip = format!("{}.{}.{}.{}", peer[0], peer[1], peer[2], peer[3]);
         let port = u32::from_be_bytes([0, 0, peer[4], peer[5]]);
-        peer_list.push(Peer::new(ip, port));
+        peer_list.push(Peer::new(None, ip, port));
     }
-
-    Ok(peer_list)
-}
-
-/// Creates an instance of an `io::Error` with a specificied `msg`.
-
-fn error<T>(msg: &str) -> Result<T, Error> {
-    Err(Error::new(ErrorKind::Other, msg))
+    peer_list
 }
