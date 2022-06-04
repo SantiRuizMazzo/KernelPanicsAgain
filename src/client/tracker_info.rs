@@ -16,4 +16,7 @@ impl TrackerInfo {
     pub fn print(&self) {
         println!("{}, {:?}", self.interval, self.peers)
     }
+    pub fn get_peers(&self) -> Vec<Peer> {
+        self.peers.clone()
+    }
 }

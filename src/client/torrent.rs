@@ -1,3 +1,5 @@
+use crate::messages::{message_parser, message_type::handshake::HandShake};
+
 use super::{
     super::urlencoding::encode, single_file::SingleFile, torrent_decoding, tracker_decoding,
     tracker_info::TrackerInfo,
@@ -9,6 +11,7 @@ use std::{
     io::{Read, Write},
     net::TcpStream,
     path::Path,
+    thread,
 };
 
 /// Represents a web server complete address.
@@ -182,6 +185,64 @@ impl Torrent {
             None => return Err("invalid formatting of tracker response".to_string()),
         };
         Ok(response[body_start..response.len()].to_vec())
+    }
+
+    /// Starts torrent download by requesting tracker info and connecting to peers
+    pub fn start_download(&mut self, client_id: [u8; 20]) -> Result<(), String> {
+        self.tracker_info = Option::Some(self.get_tracker_info(client_id, 6881)?);
+        if let Some(tracker) = &(self.tracker_info) {
+            let peers = tracker.get_peers();
+            println!("{:?}", peers);
+
+            peers.iter().for_each(|peer| {
+                let peer_clone = peer.clone();
+                let info_hash = self.info_hash;
+
+                let _ = thread::spawn(move || {
+                    if let Ok(socket) = TcpStream::connect(peer_clone.get_connection_address()) {
+                        let client_id_string =
+                            String::from_utf8_lossy(client_id.clone().as_ref()).to_string();
+                        let handshake = HandShake::new(client_id_string, info_hash);
+
+                        if let Ok(mut stream) = socket.try_clone() {
+                            if handshake.send(&mut stream).is_ok() {
+                                let mut bytes = [0; 69];
+                                if stream.read_exact(&mut bytes).is_ok() {
+                                    println!("Handshake response: {:?}", bytes);
+                                    let handshake_response = message_parser::parse_handshake(bytes);
+                                    if handshake_response.has_same_peer_id(peer_clone.get_id()) {
+                                        // Successful connection
+                                        println!(
+                                            "Successful connection to peer {:?}.",
+                                            peer_clone.get_id()
+                                        );
+                                        println!(
+                                            "Handshake response parsed: {:?}",
+                                            handshake_response
+                                        );
+                                    } else {
+                                        println!("Couldn't connect to peer.");
+                                    }
+                                    /*
+                                    if !self.is_expected_peer_id(bytes) {
+                                        println!("Unexpected peer_id");
+                                    }
+                                    */
+                                } else {
+                                    println!("Reading handshake response fail")
+                                }
+                            } else {
+                                println!("Writing error")
+                            }
+                        }
+                    }
+                })
+                .join();
+            });
+            Ok(())
+        } else {
+            Err("No tracker info found.".to_string())
+        }
     }
 }
 
