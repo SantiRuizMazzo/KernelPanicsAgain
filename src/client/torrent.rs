@@ -180,6 +180,9 @@ impl Torrent {
     }
 
     fn response_body(&self, response: Vec<u8>) -> Result<Vec<u8>, String> {
+        if !response.starts_with(b"HTTP/1.1 200 OK\r\n") {
+            return Err("tracker request sent, not accepted by tracker".to_string());
+        }
         let body_start = match response.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
             Some(headers_end) => headers_end + 4,
             None => return Err("invalid formatting of tracker response".to_string()),
