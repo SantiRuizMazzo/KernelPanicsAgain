@@ -211,18 +211,33 @@ impl Torrent {
                             if handshake.send(&mut stream).is_ok() {
                                 let mut bytes = [0; 69];
                                 if stream.read_exact(&mut bytes).is_ok() {
-                                    println!("Handshake response: {:?}", bytes);
-                                    let handshake_response = message_parser::parse_handshake(bytes);
-                                    if handshake_response.has_same_peer_id(peer_clone.get_id()) {
-                                        // Successful connection
-                                        println!(
-                                            "Successful connection to peer {:?}.",
-                                            peer_clone.get_id()
-                                        );
-                                        println!(
-                                            "Handshake response parsed: {:?}",
-                                            handshake_response
-                                        );
+                                    if message_parser::is_handshake_message(bytes) {
+                                        println!("Handshake response: {:?}", bytes);
+                                        let handshake_response =
+                                            message_parser::parse_handshake(bytes);
+                                        if handshake_response.has_same_peer_id(peer_clone.get_id())
+                                        {
+                                            // Successful connection
+                                            println!(
+                                                "Successful connection to peer {:?}.",
+                                                peer_clone.get_id()
+                                            );
+                                            println!(
+                                                "Handshake response parsed: {:?}",
+                                                handshake_response
+                                            );
+                                        }
+                                        let mut have_bytes = [0; 6];
+                                        if stream.read_exact(&mut have_bytes).is_ok() {
+                                            println!("Received bytes: {:?}", have_bytes);
+                                            if message_parser::is_have_message(have_bytes) {
+                                                let parsed_have =
+                                                    message_parser::parse_have(have_bytes);
+                                                println!("Parsed have: {:?}", parsed_have);
+                                            }
+                                        } else {
+                                            println!("Failed recieving have");
+                                        }
                                     } else {
                                         println!("Couldn't connect to peer.");
                                     }

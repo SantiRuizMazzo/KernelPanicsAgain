@@ -1,4 +1,5 @@
 use crate::messages::message_type::handshake::HandShake;
+use crate::messages::message_type::have::Have;
 
 pub fn parse_handshake(bytes: [u8; 69]) -> HandShake<'static> {
     /*
@@ -21,6 +22,7 @@ pub fn parse_handshake(bytes: [u8; 69]) -> HandShake<'static> {
             counter = 0
         }
     }
+
     */
     let protocol_length = bytes[0];
     let info_hash_index = (protocol_length + 9) as usize;
@@ -34,6 +36,9 @@ pub fn parse_handshake(bytes: [u8; 69]) -> HandShake<'static> {
     HandShake::new(string_peer_id, info_hash.try_into().unwrap())
 }
 
+pub fn parse_have(bytes: [u8; 6]) -> Have {
+    Have::new(bytes[5])
+}
 pub fn is_handshake_message(bytes: [u8; 69]) -> bool {
     let mut counter = 0;
     let mut bittorrent = [0; 19];
@@ -47,4 +52,8 @@ pub fn is_handshake_message(bytes: [u8; 69]) -> bool {
         counter += 1;
     }
     bittorrent == "BitTorrent protocol".as_bytes()
+}
+
+pub fn is_have_message(bytes: [u8; 6]) -> bool {
+    bytes[4] == 4
 }
