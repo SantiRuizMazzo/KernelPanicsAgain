@@ -5,14 +5,14 @@ use std::net::{TcpListener, TcpStream};
 
 pub struct ServerSide {
     config: Config,
-    peer_id: String,
+    peer_id: [u8; 20],
 }
 
 impl ServerSide {
     pub fn new(port: i32) -> ServerSide {
         ServerSide {
             config: Config::new(port),
-            peer_id: "empty_peer_id".to_string(),
+            peer_id: [0; 20],
         }
     }
 
@@ -28,7 +28,7 @@ impl ServerSide {
         for stream in listener.incoming() {
             match stream {
                 Ok(mut stream) => {
-                    let mut bytes = [0; 69];
+                    let mut bytes = [0; 68];
                     if stream.read_exact(&mut bytes).is_ok() {
                         println!("Handshake receive: {:?}", bytes);
                         if message_parser::is_handshake_message(bytes) {
@@ -48,13 +48,13 @@ impl ServerSide {
         Ok(())
     }
 
-    pub fn set_peer_id(&mut self, peer_id: String) {
+    pub fn set_peer_id(&mut self, peer_id: [u8; 20]) {
         self.peer_id = peer_id;
     }
 
-    fn send_handshake_response(&self, mut stream: TcpStream, bytes: [u8; 69]) {
-        let mut new_handshake = message_parser::parse_handshake(bytes);
-        new_handshake.set_peer_id(self.peer_id.clone());
+    fn send_handshake_response(&self, mut stream: TcpStream, bytes: [u8; 68]) {
+        let mut new_handshake = message_parser::parse_handshake(bytes).unwrap();
+        new_handshake.set_peer_id(self.peer_id);
         if new_handshake.send(&mut stream).is_ok() {
         } else {
             println!("Handshake response fail")

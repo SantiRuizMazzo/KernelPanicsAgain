@@ -1,28 +1,10 @@
-//use super::message_type::bitfield::Bitfield;
-use crate::messages::message_type::handshake::HandShake;
-use crate::messages::message_type::have::Have;
+use crate::messages::message_type::{handshake::HandShake, have::Have};
 
-pub fn parse_handshake(bytes: [u8; 69]) -> HandShake<'static> {
-    /*
-    let mut counter = 0;
-    let mut info_hash_len = 0;
-    let mut info_hash = [0; 20];
-    let mut peer_id = [0; 20];
-    let mut peer_id_len = 0;
-    for byte in bytes {
-        if byte == 0 && counter != 8 {
-            counter += 1;
-        } else if counter == 8 && info_hash_len < 20 {
-            info_hash[info_hash_len] = byte;
-            info_hash_len += 1;
-        } else if info_hash_len >= 20 && byte != 10 {
-            peer_id[peer_id_len] = byte;
-            peer_id_len += 1;
-        } else {
-            counter = 0
-        }
+pub fn parse_handshake(bytes: [u8; 68]) -> Result<HandShake<'static>, String> {
+    if !is_handshake_message(bytes) {
+        return Err("received message is not a handshake".to_string());
     }
-    */
+
     let protocol_length = bytes[0];
     let info_hash_index = (protocol_length + 9) as usize;
     let vec_bytes = bytes.to_vec();
@@ -31,13 +13,23 @@ pub fn parse_handshake(bytes: [u8; 69]) -> HandShake<'static> {
     let peer_id_range = (info_hash_index + 20)..vec_bytes.len();
     let peer_id = vec_bytes[peer_id_range].to_vec();
 
-    let string_peer_id = String::from_utf8_lossy(peer_id.as_ref()).to_string();
-    HandShake::new(string_peer_id, info_hash.try_into().unwrap())
+    Ok(HandShake::new(
+        peer_id
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+        info_hash
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    ))
 }
 
-pub fn parse_have(bytes: [u8; 6]) -> Have {
-    Have::new(bytes[5])
+pub fn parse_have(bytes: [u8; 6]) -> Result<Have, String> {
+    if !is_have_message(bytes) {
+        return Err("received message is not a have".to_string());
+    }
+    Ok(Have::new(bytes[5]))
 }
+
 /*
 pub fn parse_bitfield(bytes: Vec<u8>) -> Bitfield<'static> {
     //tengo 4 posiciones para len + 1 para id por lo que el bitfield empieza en la sexta posicion
@@ -48,7 +40,8 @@ pub fn parse_bitfield(bytes: Vec<u8>) -> Bitfield<'static> {
     Bitfield::new(bytes[3], bitfield)
 }
 */
-pub fn is_handshake_message(bytes: [u8; 69]) -> bool {
+
+pub fn is_handshake_message(bytes: [u8; 68]) -> bool {
     let mut counter = 0;
     let mut bittorrent = [0; 19];
     let mut bittorrent_len = 0;

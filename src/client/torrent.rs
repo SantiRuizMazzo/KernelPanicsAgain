@@ -1,7 +1,7 @@
-use crate::messages::{message_parser, message_type::handshake::HandShake};
+use crate::client::{peer_protocol, tracker_info::TrackerInfoState};
 
 use super::{
-    super::urlencoding::encode, single_file::SingleFile, torrent_decoding, tracker_decoding,
+    super::urlencoding, single_file::SingleFile, torrent_decoding, tracker_decoding,
     tracker_info::TrackerInfo,
 };
 use native_tls::TlsConnector;
@@ -46,7 +46,7 @@ pub struct Torrent {
     pieces: Vec<u8>,
     files: Vec<SingleFile>,
     info_hash: [u8; 20],
-    tracker_info: Option<TrackerInfo>,
+    tracker_info: TrackerInfoState,
 }
 
 impl Torrent {
@@ -64,7 +64,7 @@ impl Torrent {
             pieces,
             files,
             info_hash,
-            tracker_info: None,
+            tracker_info: TrackerInfoState::Unset,
         }
     }
 
@@ -115,8 +115,8 @@ impl Torrent {
         port: u32,
     ) -> Result<HashMap<&str, String>, String> {
         let mut query_dict = HashMap::new();
-        query_dict.insert("info_hash", encode(self.info_hash)?);
-        query_dict.insert("peer_id", encode(peer_id)?);
+        query_dict.insert("info_hash", urlencoding::encode(self.info_hash)?);
+        query_dict.insert("peer_id", urlencoding::encode(peer_id)?);
         query_dict.insert("port", port.to_string());
         query_dict.insert("uploaded", 0.to_string());
         query_dict.insert("downloaded", 0.to_string());
@@ -192,76 +192,21 @@ impl Torrent {
 
     /// Starts torrent download by requesting tracker info and connecting to peers
     pub fn start_download(&mut self, client_id: [u8; 20]) -> Result<(), String> {
-        self.tracker_info = Option::Some(self.get_tracker_info(client_id, 6881)?);
-        if let Some(tracker) = &(self.tracker_info) {
-            let peers = tracker.get_peers();
-            println!("{:?}", peers);
+        self.tracker_info = TrackerInfoState::Set(self.get_tracker_info(client_id, 6881)?);
+        let peers = self
+            .tracker_info
+            .get_peers()
+            .ok_or_else(|| "no peer list loaded".to_string())?;
+        println!("> PEER LIST: {:?}", peers);
 
-            peers.iter().for_each(|peer| {
-                let peer_clone = peer.clone();
-                let info_hash = self.info_hash;
-
-                let _ = thread::spawn(move || {
-                    if let Ok(socket) = TcpStream::connect(peer_clone.get_connection_address()) {
-                        let client_id_string =
-                            String::from_utf8_lossy(client_id.clone().as_ref()).to_string();
-                        let handshake = HandShake::new(client_id_string, info_hash);
-
-                        if let Ok(mut stream) = socket.try_clone() {
-                            if handshake.send(&mut stream).is_ok() {
-                                let mut bytes = [0; 69];
-                                if stream.read_exact(&mut bytes).is_ok() {
-                                    if message_parser::is_handshake_message(bytes) {
-                                        println!("Handshake response: {:?}", bytes);
-                                        let handshake_response =
-                                            message_parser::parse_handshake(bytes);
-                                        if handshake_response.has_same_peer_id(peer_clone.get_id())
-                                        {
-                                            // Successful connection
-                                            println!(
-                                                "Successful connection to peer {:?}.",
-                                                peer_clone.get_id()
-                                            );
-                                            println!(
-                                                "Handshake response parsed: {:?}",
-                                                handshake_response
-                                            );
-                                        }
-                                        //message_parser::parse_bitfield(have_bytes)
-                                        let mut have_bytes = [0; 6];
-                                        if stream.read_exact(&mut have_bytes).is_ok() {
-                                            println!("Received bytes: {:?}", have_bytes);
-                                            if message_parser::is_have_message(have_bytes) {
-                                                let parsed_have =
-                                                    message_parser::parse_have(have_bytes);
-                                                println!("Parsed have: {:?}", parsed_have);
-                                            }
-                                        } else {
-                                            println!("Failed recieving have");
-                                        }
-                                    } else {
-                                        println!("Couldn't connect to peer.");
-                                    }
-                                    /*
-                                    if !self.is_expected_peer_id(bytes) {
-                                        println!("Unexpected peer_id");
-                                    }
-                                    */
-                                } else {
-                                    println!("Reading handshake response fail")
-                                }
-                            } else {
-                                println!("Writing error")
-                            }
-                        }
-                    }
-                })
-                .join();
+        for peer in peers {
+            let info_hash = self.info_hash;
+            let thread = thread::spawn(move || {
+                peer_protocol::handle_communication(peer, client_id, info_hash)
             });
-            Ok(())
-        } else {
-            Err("No tracker info found.".to_string())
+            println!("> THREAD RESULT: {:?}", thread.join());
         }
+        Ok(())
     }
 }
 

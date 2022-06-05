@@ -7,7 +7,7 @@ pub fn sha1(bytes: impl AsRef<[u8]>) -> Result<[u8; 20], String> {
         .finalize()
         .to_vec()
         .try_into()
-        .map_err(|_err| "hashing error".to_string())
+        .map_err(|_| "hashing error".to_string())
 }
 
 /// Transforms a collection of bytes into a valid UTF-8 string.

@@ -2,23 +2,26 @@ use crate::{
     client::client_side::ClientSide,
     logger::torrent_logger::{Logger, Message},
     server::server_side::ServerSide,
+    utils,
 };
 use std::env::args;
 
 pub fn run() -> Result<(), String> {
     let logger: Logger = Logger::new("logtest.txt".to_string())?;
-    // Comentar el init del server para probar peers reales.
-    let mut client = ClientSide::new(8081);
+    let mut client = ClientSide::new(8081)?;
     client.load_torrents(args())?;
-    println!("{}", client.peer_id);
-    let mut log_peer_id = "Client Peer ID:".to_string();
-    log_peer_id += &client.peer_id;
+    println!("{:?}", client.get_id());
 
     let mut server = ServerSide::new(8081);
-    server.set_peer_id(client.peer_id.clone());
+    server.set_peer_id(client.get_id());
+    // Comentar el init del server para probar peers reales.
     server.init_server();
-    client.init_client();
+    println!("{}", client.init_client()?);
 
+    let log_peer_id = format!(
+        "Client Peer ID: {}",
+        utils::bytes_to_string(&client.get_id())?
+    );
     match logger.sender.send(Message::Log(log_peer_id)) {
         Err(error) => Err(error.to_string()),
         Ok(_) => Ok(()),

@@ -1,29 +1,31 @@
 use super::{peer::Peer, single_file::SingleFile};
 use crate::client::torrent::Torrent;
 use crate::config::Config;
-//use crate::messages::message_parser;
-//use crate::messages::message_type::handshake::HandShake;
-use crate::urlencoding::encode;
+use crate::urlencoding;
 use rand::Rng;
-//use std::io::Read;
-//use std::net::TcpStream;
 use std::{fs, ops::Deref, path::Path};
 
 pub struct ClientSide {
-    pub peer_id: String,
+    pub peer_id: [u8; 20],
     pub config: Config,
     torrents: Vec<Torrent>,
 }
 
 impl ClientSide {
-    fn generate_peer_id() -> String {
-        let mut peer_id = String::from("-PK0001-");
+    fn generate_peer_id() -> Result<[u8; 20], String> {
+        let mut peer_id = b"-PK0001-".to_vec();
         let mut generator = rand::thread_rng();
         for _i in 0..12 {
-            let aux: i8 = generator.gen_range(0..10);
-            peer_id += &aux.to_string();
+            let aux: u8 = generator.gen_range(0..10);
+            peer_id.push(aux)
         }
         peer_id
+            .try_into()
+            .map_err(|_| "conversion error".to_string())
+    }
+
+    pub fn get_id(&self) -> [u8; 20] {
+        self.peer_id
     }
 
     pub fn load_torrents<A>(&mut self, args: A) -> Result<(), String>
@@ -64,7 +66,7 @@ impl ClientSide {
         Ok(())
     }
 
-    pub fn new(port: i32) -> ClientSide {
+    pub fn new(port: i32) -> Result<ClientSide, String> {
         let torrent = Torrent::from("tests/ultramarine.torrent").unwrap();
         let tracker_info = torrent
             .get_tracker_info(*b"12345678901234567890", 6881)
@@ -73,31 +75,29 @@ impl ClientSide {
         let _ = SingleFile::new(0, "xd.txt".to_string());
         let peer = Peer::new(None, "chau".to_string(), 0);
         peer.print();
-        let _ = encode("上海+中國");
+        let _ = urlencoding::encode("上海+中國");
+        let config = Config::new(1111);
+        config.get_client_address();
 
         let torrent_vec = Vec::new();
 
-        ClientSide {
-            peer_id: ClientSide::generate_peer_id(),
+        Ok(ClientSide {
+            peer_id: ClientSide::generate_peer_id()?,
             config: Config::new(port),
             torrents: torrent_vec,
-        }
+        })
     }
 
-    pub fn init_client(&mut self) {
-        println!("Connecting to {:?}", self.config.get_client_address());
-        let _ = self.run_client();
+    pub fn init_client(&mut self) -> Result<String, String> {
+        self.run_client()
     }
 
     /// Client run receive an address and something readadble.
-    fn run_client(&mut self) -> Result<(), String> {
-        if let Ok(bytes_client_id) = <&[u8; 20]>::try_from(self.peer_id.as_bytes()) {
-            if let Some(torrent) = self.torrents.first_mut() {
-                let _ = torrent.start_download(*bytes_client_id);
-            }
+    fn run_client(&mut self) -> Result<String, String> {
+        if let Some(torrent) = self.torrents.first_mut() {
+            torrent.start_download(self.peer_id)?;
         }
-
-        Ok(())
+        Ok("Successful download 😎🤙".to_string())
     }
 }
 
@@ -106,27 +106,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generate_correctly_sized_peer_id() {
-        let s = ClientSide::generate_peer_id();
+    fn generate_correctly_sized_peer_id() -> Result<(), String> {
+        let s = ClientSide::generate_peer_id()?;
         assert_eq!(20, s.len() * std::mem::size_of::<u8>());
+        Ok(())
     }
 
     #[test]
-    fn generate_correctly_sized_peer_id_inside_client_side_struct() {
-        let client = ClientSide::new(8081);
+    fn generate_correctly_sized_peer_id_inside_client_side_struct() -> Result<(), String> {
+        let client = ClientSide::new(8081)?;
         assert_eq!(20, client.peer_id.len() * std::mem::size_of::<u8>());
+        Ok(())
     }
 
     #[test]
-    fn client_generator() {
-        let client = ClientSide::new(8081);
-
+    fn client_generator() -> Result<(), String> {
+        let client = ClientSide::new(8081)?;
         assert_eq!(20, client.peer_id.len() * std::mem::size_of::<u8>());
+        Ok(())
     }
 
     #[test]
     fn load_a_single_torrent_from_a_path_to_file() -> Result<(), String> {
-        let mut client = ClientSide::new(8081);
+        let mut client = ClientSide::new(8081)?;
         let command_line_args = vec!["tests/debian.torrent".to_string()].into_iter();
         client.load_torrents(command_line_args)?;
         assert_eq!(
@@ -138,7 +140,7 @@ mod tests {
 
     #[test]
     fn load_multiple_torrents_from_multiple_paths_to_files() -> Result<(), String> {
-        let mut client = ClientSide::new(8081);
+        let mut client = ClientSide::new(8081)?;
         let command_line_args = vec![
             "tests/debian.torrent".to_string(),
             "tests/fedora.torrent".to_string(),
@@ -157,7 +159,7 @@ mod tests {
 
     #[test]
     fn load_multiple_torrents_from_a_path_to_directory() -> Result<(), String> {
-        let mut client = ClientSide::new(8081);
+        let mut client = ClientSide::new(8081)?;
         let command_line_args = vec!["tests".to_string()].into_iter();
         client.load_torrents(command_line_args)?;
         assert!(client
@@ -187,7 +189,7 @@ mod tests {
 
     #[test]
     fn load_torrents_from_path_to_directory_without_torrents_should_fail() -> Result<(), String> {
-        let mut client = ClientSide::new(8081);
+        let mut client = ClientSide::new(8081)?;
         let args = vec!["src".to_string()].into_iter();
         assert!(client.load_torrents(args).is_err());
         Ok(())

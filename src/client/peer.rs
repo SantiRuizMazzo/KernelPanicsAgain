@@ -19,7 +19,8 @@ impl Peer {
     pub fn get_connection_address(&self) -> String {
         format!("{}:{}", self.ip, self.port)
     }
-    pub fn get_id(&self) -> Option<String> {
-        (self.id).map(|id| String::from_utf8_lossy(id.as_ref()).to_string())
+
+    pub fn get_id(&self) -> Option<[u8; 20]> {
+        self.id
     }
 }
