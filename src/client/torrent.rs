@@ -227,6 +227,7 @@ impl Torrent {
                                                 handshake_response
                                             );
                                         }
+                                        //message_parser::parse_bitfield(have_bytes)
                                         let mut have_bytes = [0; 6];
                                         if stream.read_exact(&mut have_bytes).is_ok() {
                                             println!("Received bytes: {:?}", have_bytes);

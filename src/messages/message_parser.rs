@@ -1,3 +1,4 @@
+//use super::message_type::bitfield::Bitfield;
 use crate::messages::message_type::handshake::HandShake;
 use crate::messages::message_type::have::Have;
 
@@ -8,9 +9,8 @@ pub fn parse_handshake(bytes: [u8; 69]) -> HandShake<'static> {
     let mut info_hash = [0; 20];
     let mut peer_id = [0; 20];
     let mut peer_id_len = 0;
-
     for byte in bytes {
-        if counter != 8 {
+        if byte == 0 && counter != 8 {
             counter += 1;
         } else if counter == 8 && info_hash_len < 20 {
             info_hash[info_hash_len] = byte;
@@ -22,7 +22,6 @@ pub fn parse_handshake(bytes: [u8; 69]) -> HandShake<'static> {
             counter = 0
         }
     }
-
     */
     let protocol_length = bytes[0];
     let info_hash_index = (protocol_length + 9) as usize;
@@ -39,6 +38,16 @@ pub fn parse_handshake(bytes: [u8; 69]) -> HandShake<'static> {
 pub fn parse_have(bytes: [u8; 6]) -> Have {
     Have::new(bytes[5])
 }
+/*
+pub fn parse_bitfield(bytes: Vec<u8>) -> Bitfield<'static> {
+    //tengo 4 posiciones para len + 1 para id por lo que el bitfield empieza en la sexta posicion
+    //lo que hago aca es obtener un slice del vector bytes que va desde 6 hasta len-1 y lo convierto en un nuevo vector
+    let bitfield_start: usize = 5;
+    let bitfield_end: usize = usize::from(bytes[0..3]) - 1;
+    let bitfield = Vec::from(&bytes[bitfield_start..bitfield_end]);
+    Bitfield::new(bytes[3], bitfield)
+}
+*/
 pub fn is_handshake_message(bytes: [u8; 69]) -> bool {
     let mut counter = 0;
     let mut bittorrent = [0; 19];
@@ -57,3 +66,14 @@ pub fn is_handshake_message(bytes: [u8; 69]) -> bool {
 pub fn is_have_message(bytes: [u8; 6]) -> bool {
     bytes[4] == 4
 }
+/*
+pub fn is_bitfield_message(bytes: Vec<u8>) -> bool {
+    bytes[4] == 5
+}
+pub fn is_interested_message(bytes: [u8; 5]) -> bool {
+    bytes[4] == 2
+}
+pub fn is_unchoke_message(bytes: [u8; 5]) -> bool {
+    bytes[4] == 1
+}
+*/
