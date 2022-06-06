@@ -1,30 +1,19 @@
-//use std::io::Write;
-//use std::net::TcpStream;
-/*
-pub struct Interested<'a> {
-    // 4 byte
-    len: &'a [u8],
-    // 1 byte
-    id: &'a [u8],
+use std::io::Write;
+use std::net::TcpStream;
+
+pub struct Interested {
+    len: u32,
+    id: u8,
 }
 
-impl Interested<'_> {
-    pub fn new() -> Interested<'static> {
-        Interested {
-            len: &[1],
-            id: &[2],
-        }
+impl Interested {
+    pub fn new() -> Interested {
+        Interested { len: 1, id: 2 }
     }
 
     pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        stream.write_all(&[0])?;
-        stream.write_all(&[0])?;
-        stream.write_all(&[0])?;
-        stream.write_all(self.len)?;
-        stream.write_all(self.id)?;
-
+        stream.write_all(&u32::to_be_bytes(self.len))?;
+        stream.write_all(&[self.id])?;
         Ok(())
     }
-
 }
-*/

@@ -7,16 +7,16 @@ impl Config {
         Config { tcp_port }
     }
 
-    pub fn get_server_address(&self) -> String {
+    /*pub fn get_server_address(&self) -> String {
         "0.0.0.0:".to_owned() + &(self.tcp_port).to_string()
-    }
+    }*/
 
-    pub fn get_client_address(&self) -> String {
+    /*pub fn get_client_address(&self) -> String {
         "localhost:".to_owned() + &(self.tcp_port).to_string()
-    }
+    }*/
 }
 
-#[cfg(test)]
+/*#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -39,4 +39,4 @@ mod tests {
         let address = "localhost:".to_owned() + &(8081).to_string();
         assert_eq!(address, config.get_client_address());
     }
-}
+}*/

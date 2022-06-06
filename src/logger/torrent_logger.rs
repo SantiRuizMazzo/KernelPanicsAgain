@@ -51,8 +51,8 @@ mod tests {
 
     use super::*;
     #[test]
-    fn test_logging_in_different_threads() {
-        let logger: Logger = Logger::new("tests/logtest.txt".to_string()).unwrap();
+    fn test_logging_in_different_threads() -> Result<(), String> {
+        let logger: Logger = Logger::new("tests/logtest.txt".to_string())?;
         let (tx, rx) = mpsc::channel();
         let _ = tx.send(logger.sender.clone());
         let _ = thread::spawn(move || {
@@ -69,5 +69,6 @@ mod tests {
         let _ = logger
             .sender
             .send(Message::Log("Este es otro de mis test de log".to_string()));
+        Ok(())
     }
 }

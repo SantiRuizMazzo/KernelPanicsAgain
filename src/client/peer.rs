@@ -11,11 +11,6 @@ impl Peer {
         Peer { id, ip, port }
     }
 
-    //TEMPORAL FUNCTION TO FIX CLIPPY WARNINGS!
-    pub fn print(&self) {
-        println!("{}, {}", self.ip, self.port)
-    }
-
     pub fn get_connection_address(&self) -> String {
         format!("{}:{}", self.ip, self.port)
     }

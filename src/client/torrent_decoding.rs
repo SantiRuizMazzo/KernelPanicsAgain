@@ -6,6 +6,7 @@ use super::{
     single_file::SingleFile,
     torrent::Torrent,
 };
+use crate::client::torrent_piece::TorrentPiece;
 use std::{collections::HashMap, vec};
 
 pub fn torrent_from_bytes(bytes: Vec<u8>) -> Result<Torrent, String> {
@@ -21,10 +22,10 @@ pub fn torrent_from_bytes(bytes: Vec<u8>) -> Result<Torrent, String> {
 
     let announce = get_string_from(&file, "announce")?;
     let name = get_string_from(info, "name")?;
-    let piece_length = get_integer_from(info, "piece length")?;
+    let piece_length = get_integer_from(info, "piece length")? as usize;
 
     let pieces = match info.get("pieces") {
-        Some(BType::String(bytes)) => valid_pieces(bytes)?,
+        Some(BType::String(bytes)) => torrent_pieces_list(bytes, piece_length as usize)?,
         _ => return Err("pieces key not present or has invalid value type".to_string()),
     };
 
@@ -63,16 +64,28 @@ fn get_integer_from(dict: &HashMap<String, BType>, key: &str) -> Result<i64, Str
 }
 
 /// Checks if the pieces key bytes are multiple of 20.
-fn valid_pieces(pieces: &[u8]) -> Result<Vec<u8>, String> {
-    if pieces.len() % 20 == 0 {
-        return Ok(pieces.to_owned());
+fn torrent_pieces_list(pieces: &[u8], piece_length: usize) -> Result<Vec<TorrentPiece>, String> {
+    if pieces.len() % 20 != 0 {
+        return Err("pieces string is not a multiple of 20".to_string());
     }
-    Err("pieces string is not a multiple of 20".to_string())
+
+    let mut final_pieces = Vec::with_capacity(pieces.len() / 20);
+    for piece in pieces.chunks_exact(20).enumerate() {
+        final_pieces.push(TorrentPiece::new(
+            piece.0,
+            piece_length,
+            piece
+                .1
+                .try_into()
+                .map_err(|_| "conversion error".to_string())?,
+        ));
+    }
+    Ok(final_pieces)
 }
 
 /// Given a `name` and `length` for a file, it creates a vector of only one `SingleFile` struct.
 fn single_file_list(name: String, length: i64) -> Vec<SingleFile> {
-    vec![SingleFile { length, path: name }]
+    vec![SingleFile::new(length, name)]
 }
 
 /// Given a `name` and a vector of `BType`'d dictionaries, it creates a vector of valid `SingleFile` structs.
@@ -150,7 +163,7 @@ mod tests {
         let expected_torrent = Torrent::new(
             "udp://tracker.openbittorrent.com:80".to_string(),
             65536,
-            file_bytes[148..168].to_vec(),
+            torrent_pieces_list(&file_bytes[148..168].to_vec(), 65536)?,
             vec![SingleFile::new(20, "sample.txt".to_string())],
             [
                 0xd0, 0xd1, 0x4c, 0x92, 0x6e, 0x6e, 0x99, 0x76, 0x1a, 0x2f, 0xdc, 0xff, 0x27, 0xb4,
@@ -170,7 +183,7 @@ mod tests {
         let expected_torrent = Torrent::new(
             "udp://tracker.opentrackr.org:1337/announce".to_string(),
             16384,
-            file_bytes[392..412].to_vec(),
+            torrent_pieces_list(&file_bytes[392..412].to_vec(), 16384)?,
             vec![
                 SingleFile::new(8, "bla/sub_bla/a.txt".to_string()),
                 SingleFile::new(8, "bla/sub_bla/neo_bla/b.txt".to_string()),

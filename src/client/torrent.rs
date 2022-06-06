@@ -1,9 +1,8 @@
-use crate::client::{peer_protocol, tracker_info::TrackerInfoState};
-
 use super::{
-    super::urlencoding, single_file::SingleFile, torrent_decoding, tracker_decoding,
-    tracker_info::TrackerInfo,
+    super::urlencoding, single_file::SingleFile, torrent_decoding, torrent_piece::TorrentPiece,
+    tracker_decoding, tracker_info::TrackerInfo,
 };
+use crate::client::{torrent_worker::TorrentWorker, tracker_info::TrackerInfoState};
 use native_tls::TlsConnector;
 use std::{
     collections::HashMap,
@@ -11,7 +10,7 @@ use std::{
     io::{Read, Write},
     net::TcpStream,
     path::Path,
-    thread,
+    sync::{mpsc, Arc, Mutex},
 };
 
 /// Represents a web server complete address.
@@ -42,8 +41,8 @@ impl ServerAddr {
 #[derive(PartialEq, Eq, Debug)]
 pub struct Torrent {
     announce: String,
-    piece_length: i64,
-    pieces: Vec<u8>,
+    piece_length: usize,
+    pieces: Vec<TorrentPiece>,
     files: Vec<SingleFile>,
     info_hash: [u8; 20],
     tracker_info: TrackerInfoState,
@@ -53,8 +52,8 @@ impl Torrent {
     /// Builds a new `Torrent` instance with the given parameters.
     pub fn new(
         announce: String,
-        piece_length: i64,
-        pieces: Vec<u8>,
+        piece_length: usize,
+        pieces: Vec<TorrentPiece>,
         files: Vec<SingleFile>,
         info_hash: [u8; 20],
     ) -> Torrent {
@@ -198,14 +197,41 @@ impl Torrent {
             .get_peers()
             .ok_or_else(|| "no peer list loaded".to_string())?;
         println!("> PEER LIST: {:?}", peers);
+        let info_hash = self.info_hash;
 
-        for peer in peers {
-            let info_hash = self.info_hash;
-            let thread = thread::spawn(move || {
-                peer_protocol::handle_communication(peer, client_id, info_hash)
-            });
-            println!("> THREAD RESULT: {:?}", thread.join());
+        //CREACION DEL CHANNEL
+        let (sender, receiver) = mpsc::channel::<TorrentPiece>();
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        //ENVIO DE PIEZAS
+        /*for piece in &self.pieces {
+            sender.send(*piece).map_err(|err| err.to_string())?
+        }*/
+        sender.send(self.pieces[0]).map_err(|err| err.to_string())?;
+
+        //CREACION DE UN WORKER PARA EL PRIMER PEER
+        let mut worker = TorrentWorker::new(
+            peers[0].clone(),
+            client_id,
+            info_hash,
+            Arc::clone(&receiver),
+        );
+
+        if let Some(worker_thread) = worker.get_thread() {
+            worker_thread
+                .join()
+                .map_err(|_| "worker thread error".to_string())?;
         }
+
+        /*let workers = Vec::with_capacity(peers.len());
+        for peer in peers {
+            workers.push(TorrentWorker::new(
+                peer,
+                client_id,
+                info_hash,
+                Arc::clone(&receiver),
+            ));
+        }*/
         Ok(())
     }
 }

@@ -2,38 +2,38 @@ use std::io::Write;
 use std::net::TcpStream;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct HandShake<'a> {
-    pstrlen: &'a [u8],
+pub struct HandShake {
+    pstrlen: u8,
     pstr: String,
-    reserved: &'a [u8],
+    reserved: [u8; 8],
     peer_id: [u8; 20],
     info_hash: [u8; 20],
 }
 
-impl HandShake<'_> {
-    pub fn new(peer_id: [u8; 20], info_hash: [u8; 20]) -> HandShake<'static> {
+impl HandShake {
+    pub fn new(peer_id: [u8; 20], info_hash: [u8; 20]) -> HandShake {
         HandShake {
-            pstrlen: &[19],
+            pstrlen: 19,
             pstr: "BitTorrent protocol".to_string(),
-            reserved: &[0, 0, 0, 0, 0, 0, 0, 0],
+            reserved: [0, 0, 0, 0, 0, 0, 0, 0],
             peer_id,
             info_hash,
         }
     }
 
     pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        stream.write_all(self.pstrlen)?;
+        stream.write_all(&[self.pstrlen])?;
         stream.write_all(self.pstr.as_bytes())?;
-        stream.write_all(self.reserved)?;
+        stream.write_all(&self.reserved)?;
         stream.write_all(&self.info_hash)?;
         stream.write_all(&self.peer_id)?;
-        stream.write_all("\n".as_bytes())?;
+        //stream.write_all("\n".as_bytes())?;
         Ok(())
     }
 
-    pub fn set_peer_id(&mut self, peer_id: [u8; 20]) {
+    /*pub fn set_peer_id(&mut self, peer_id: [u8; 20]) {
         self.peer_id = peer_id;
-    }
+    }*/
 
     pub fn has_same_peer_id(&self, peer_id: Option<[u8; 20]>) -> bool {
         match peer_id {
@@ -54,7 +54,7 @@ mod tests {
         let reserved = [0; 8];
         let handshake = HandShake::new(peer_id, empty_array);
 
-        assert_eq!(1, handshake.pstrlen.len());
+        assert_eq!(19, handshake.pstrlen);
         assert_eq!("BitTorrent protocol".to_string(), handshake.pstr);
         assert_eq!(*b"-PK0001-144591253628", handshake.peer_id);
         assert_eq!(reserved, handshake.reserved);
@@ -70,8 +70,7 @@ mod tests {
 
         assert_eq!(
             68,
-            handshake.pstrlen.len()
-                + handshake.pstr.len()
+            1 + handshake.pstr.len()
                 + handshake.peer_id.len()
                 + handshake.reserved.len()
                 + handshake.info_hash.len()

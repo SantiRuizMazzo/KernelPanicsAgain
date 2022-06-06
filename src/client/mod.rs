@@ -4,5 +4,7 @@ mod peer_protocol;
 mod single_file;
 mod torrent;
 mod torrent_decoding;
+mod torrent_piece;
+mod torrent_worker;
 mod tracker_decoding;
 mod tracker_info;

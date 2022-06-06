@@ -1,6 +1,56 @@
-use crate::messages::message_type::{handshake::HandShake, have::Have};
+use crate::messages::message_type::{
+    choke::Choke, handshake::HandShake, have::Have, piece::Piece, unchoke::Unchoke,
+};
 
-pub fn parse_handshake(bytes: [u8; 68]) -> Result<HandShake<'static>, String> {
+use super::message_type::bitfield::Bitfield;
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum TorrentMessage {
+    //Handshake(HandShake),
+    Bitfield(Bitfield),
+    Have(Have),
+    Unchoke(Unchoke),
+    //Interested(Interested),
+    //NotInterested(NotInterested),
+    //Request(Request),
+    Piece(Piece),
+    //Cancel(Cancel),
+    Choke(Choke),
+}
+pub fn parse(bytes_read: Vec<u8>) -> Result<TorrentMessage, String> {
+    match bytes_read[0] {
+        0 => Ok(TorrentMessage::Choke(Choke::new())),
+        1 => Ok(TorrentMessage::Unchoke(Unchoke::new())),
+        //2 => Ok(TorrentMessage::Interested(Interested::new())),
+        //3 => Ok(TorrentMessage::NotInterested(NotInterested::new())),
+        4 => parse_have(bytes_read),
+        5 => parse_bitfield(bytes_read),
+        //6 => parse_request(bytes_read),
+        7 => parse_piece(bytes_read),
+        //8 => parse_cancel(bytes_read),
+        _ => Err("Error while parsing message bytes read".to_string()),
+    }
+}
+pub fn parse_piece(bytes: Vec<u8>) -> Result<TorrentMessage, String> {
+    if !is_piece_message(bytes.clone()) {
+        return Err("received message is not a bitfield".to_string());
+    }
+    let index = u32::from_be_bytes(
+        bytes[1..5]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+    let begin = u32::from_be_bytes(
+        bytes[5..9]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+    let block = Vec::from(&bytes[9..]);
+
+    Ok(TorrentMessage::Piece(Piece::new(index, begin, block)))
+}
+
+pub fn parse_handshake(bytes: [u8; 68]) -> Result<HandShake, String> {
     if !is_handshake_message(bytes) {
         return Err("received message is not a handshake".to_string());
     }
@@ -23,23 +73,28 @@ pub fn parse_handshake(bytes: [u8; 68]) -> Result<HandShake<'static>, String> {
     ))
 }
 
-pub fn parse_have(bytes: [u8; 6]) -> Result<Have, String> {
-    if !is_have_message(bytes) {
+pub fn parse_have(bytes: Vec<u8>) -> Result<TorrentMessage, String> {
+    if !is_have_message(bytes.clone()) {
         return Err("received message is not a have".to_string());
     }
-    Ok(Have::new(bytes[5]))
+    let piece_index = u32::from_be_bytes(
+        bytes[1..]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+    Ok(TorrentMessage::Have(Have::new(piece_index)))
 }
 
-/*
-pub fn parse_bitfield(bytes: Vec<u8>) -> Bitfield<'static> {
-    //tengo 4 posiciones para len + 1 para id por lo que el bitfield empieza en la sexta posicion
-    //lo que hago aca es obtener un slice del vector bytes que va desde 6 hasta len-1 y lo convierto en un nuevo vector
-    let bitfield_start: usize = 5;
-    let bitfield_end: usize = usize::from(bytes[0..3]) - 1;
-    let bitfield = Vec::from(&bytes[bitfield_start..bitfield_end]);
-    Bitfield::new(bytes[3], bitfield)
+pub fn parse_bitfield(bytes: Vec<u8>) -> Result<TorrentMessage, String> {
+    if !is_bitfield_message(bytes.clone()) {
+        return Err("received message is not a bitfield".to_string());
+    }
+    let bitfield = Vec::from(&bytes[1..]);
+    Ok(TorrentMessage::Bitfield(Bitfield::new(
+        bitfield.len() as u32,
+        bitfield,
+    )))
 }
-*/
 
 pub fn is_handshake_message(bytes: [u8; 68]) -> bool {
     let mut counter = 0;
@@ -56,17 +111,25 @@ pub fn is_handshake_message(bytes: [u8; 68]) -> bool {
     bittorrent == "BitTorrent protocol".as_bytes()
 }
 
-pub fn is_have_message(bytes: [u8; 6]) -> bool {
-    bytes[4] == 4
+pub fn is_have_message(bytes: Vec<u8>) -> bool {
+    bytes[0] == 4
+}
+
+pub fn is_bitfield_message(bytes: Vec<u8>) -> bool {
+    bytes[0] == 5
+}
+pub fn is_piece_message(bytes: Vec<u8>) -> bool {
+    bytes[0] == 7
 }
 /*
-pub fn is_bitfield_message(bytes: Vec<u8>) -> bool {
-    bytes[4] == 5
-}
 pub fn is_interested_message(bytes: [u8; 5]) -> bool {
-    bytes[4] == 2
+    bytes[0] == 2
 }
 pub fn is_unchoke_message(bytes: [u8; 5]) -> bool {
-    bytes[4] == 1
+    bytes[0] == 1
 }
 */
+
+/*pub fn is_request_message(bytes: [u8; 5]) -> bool {
+    bytes[4] == 6
+}*/

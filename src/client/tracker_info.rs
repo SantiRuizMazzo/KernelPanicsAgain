@@ -27,11 +27,6 @@ impl TrackerInfo {
         TrackerInfo { interval, peers }
     }
 
-    //TEMPORAL FUNCTION TO FIX CLIPPY WARNINGS!
-    pub fn print(&self) {
-        println!("{}, {:?}", self.interval, self.peers)
-    }
-
     pub fn get_peers(&self) -> Vec<Peer> {
         self.peers.clone()
     }

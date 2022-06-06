@@ -1,7 +1,5 @@
-use super::{peer::Peer, single_file::SingleFile};
 use crate::client::torrent::Torrent;
 use crate::config::Config;
-use crate::urlencoding;
 use rand::Rng;
 use std::{fs, ops::Deref, path::Path};
 
@@ -67,24 +65,20 @@ impl ClientSide {
     }
 
     pub fn new(port: i32) -> Result<ClientSide, String> {
-        let torrent = Torrent::from("tests/ultramarine.torrent").unwrap();
-        let tracker_info = torrent
-            .get_tracker_info(*b"12345678901234567890", 6881)
-            .unwrap();
+        /*let torrent = Torrent::from("tests/ultramarine.torrent")?;
+        let tracker_info = torrent.get_tracker_info(*b"12345678901234567890", 6881)?;
         tracker_info.print();
         let _ = SingleFile::new(0, "xd.txt".to_string());
         let peer = Peer::new(None, "chau".to_string(), 0);
         peer.print();
         let _ = urlencoding::encode("上海+中國");
         let config = Config::new(1111);
-        config.get_client_address();
-
-        let torrent_vec = Vec::new();
+        config.get_client_address();*/
 
         Ok(ClientSide {
             peer_id: ClientSide::generate_peer_id()?,
             config: Config::new(port),
-            torrents: torrent_vec,
+            torrents: Vec::new(),
         })
     }
 

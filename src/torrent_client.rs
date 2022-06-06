@@ -15,7 +15,7 @@ pub fn run() -> Result<(), String> {
     let mut server = ServerSide::new(8081);
     server.set_peer_id(client.get_id());
     // Comentar el init del server para probar peers reales.
-    server.init_server();
+    //server.init_server();
     println!("{}", client.init_client()?);
 
     let log_peer_id = format!(
