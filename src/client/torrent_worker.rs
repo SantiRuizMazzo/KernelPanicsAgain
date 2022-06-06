@@ -23,18 +23,6 @@ impl TorrentWorker {
             if let Ok(receiver_locked) = receiver.lock() {
                 if let Ok(piece_to_download) = receiver_locked.recv() {
                     println!("> PIECE TO DOWNLOAD: {:?}", piece_to_download);
-                    if let Err(msg) = peer_protocol::handle_communication(
-                        remote_peer.clone(),
-                        client_id,
-                        info_hash,
-                        piece_to_download,
-                    ) {
-                        if msg == "finished downloading piece" {
-                            println!(" FINISHED ");
-                            break;
-                        }
-                    }
-
                     if let Ok(downloaded_bytes) = peer_protocol::handle_communication(
                         remote_peer.clone(),
                         client_id,
@@ -47,6 +35,7 @@ impl TorrentWorker {
                             .open(format!("{}", piece_to_download.get_index()))
                         {
                             let _ = file.write_all(&downloaded_bytes);
+                            break;
                         }
                     }
                 }
