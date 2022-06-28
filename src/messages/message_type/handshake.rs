@@ -11,23 +11,27 @@ pub struct HandShake {
 }
 
 impl HandShake {
-    pub fn new(peer_id: [u8; 20], info_hash: [u8; 20]) -> HandShake {
+    pub fn new(
+        pstr: String,
+        reserved: [u8; 8],
+        info_hash: [u8; 20],
+        peer_id: [u8; 20],
+    ) -> HandShake {
         HandShake {
-            pstrlen: 19,
-            pstr: "BitTorrent protocol".to_string(),
-            reserved: [0, 0, 0, 0, 0, 0, 0, 0],
+            pstrlen: pstr.len() as u8,
+            pstr,
+            reserved,
             peer_id,
             info_hash,
         }
     }
 
     pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        stream.write_all(&[self.pstrlen])?;
+        stream.write_all(&self.pstrlen.to_be_bytes())?;
         stream.write_all(self.pstr.as_bytes())?;
         stream.write_all(&self.reserved)?;
         stream.write_all(&self.info_hash)?;
         stream.write_all(&self.peer_id)?;
-        //stream.write_all("\n".as_bytes())?;
         Ok(())
     }
 
@@ -52,7 +56,12 @@ mod tests {
         let empty_array = [0; 20];
         let peer_id = *b"-PK0001-144591253628";
         let reserved = [0; 8];
-        let handshake = HandShake::new(peer_id, empty_array);
+        let handshake = HandShake::new(
+            "BitTorrent protocol".to_string(),
+            reserved,
+            empty_array,
+            peer_id,
+        );
 
         assert_eq!(19, handshake.pstrlen);
         assert_eq!("BitTorrent protocol".to_string(), handshake.pstr);
@@ -65,8 +74,14 @@ mod tests {
     fn generate_correctly_handshake_size() {
         let empty_array = [0; 20];
         let peer_id = *b"-PK0001-144591253628";
+        let reserved = [0; 8];
 
-        let handshake = HandShake::new(peer_id, empty_array);
+        let handshake = HandShake::new(
+            "BitTorrent protocol".to_string(),
+            reserved,
+            peer_id,
+            empty_array,
+        );
 
         assert_eq!(
             68,

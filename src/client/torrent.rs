@@ -82,6 +82,7 @@ impl Torrent {
         let tracker_addr = self.tracker_address()?;
         let query_dict = self.query_string_dict(peer_id, port)?;
         let tracker_req = self.tracker_request(&tracker_addr.domain, query_dict);
+        println!("TRACKER REQUEST: {tracker_req}");
         let tracker_res = self.tracker_communication(tracker_addr, tracker_req)?;
         tracker_decoding::tracker_info_from_bytes(self.response_body(tracker_res)?)
     }
@@ -196,42 +197,45 @@ impl Torrent {
             .tracker_info
             .get_peers()
             .ok_or_else(|| "no peer list loaded".to_string())?;
-        println!("> PEER LIST: {:?}", peers);
-        let info_hash = self.info_hash;
+        println!("TOTAL PEERS: {}", peers.len());
+        println!("TOTAL PIECES: {}", self.pieces.len());
 
-        //CREACION DEL CHANNEL
         let (sender, receiver) = mpsc::channel::<TorrentPiece>();
         let receiver = Arc::new(Mutex::new(receiver));
 
-        //ENVIO DE PIEZAS
-        /*for piece in &self.pieces {
-            sender.send(*piece).map_err(|err| err.to_string())?
-        }*/
-        sender.send(self.pieces[0]).map_err(|err| err.to_string())?;
+        for &piece in &self.pieces {
+            sender.send(piece).map_err(|err| err.to_string())?
+        }
 
-        //CREACION DE UN WORKER PARA EL PRIMER PEER
         let mut worker = TorrentWorker::new(
             peers[0].clone(),
             client_id,
-            info_hash,
+            self.info_hash,
+            sender,
             Arc::clone(&receiver),
         );
 
         if let Some(worker_thread) = worker.get_thread() {
-            worker_thread
-                .join()
-                .map_err(|_| "worker thread error".to_string())?;
+            worker_thread.join().map_err(|_| String::new())??;
         }
 
-        /*let workers = Vec::with_capacity(peers.len());
+        /*let mut workers = Vec::with_capacity(peers.len());
         for peer in peers {
             workers.push(TorrentWorker::new(
                 peer,
                 client_id,
-                info_hash,
+                self.info_hash,
+                sender.clone(),
                 Arc::clone(&receiver),
             ));
+        }
+
+        for worker in workers.iter_mut() {
+            if let Some(worker_thread) = worker.get_thread() {
+                worker_thread.join().map_err(|_| String::new())??;
+            }
         }*/
+
         Ok(())
     }
 }
@@ -242,7 +246,7 @@ mod tests {
 
     #[test]
     fn sending_bytes_to_tracker() -> Result<(), String> {
-        let torrent = Torrent::from("tests/ubuntu.torrent")?;
+        let torrent = Torrent::from("tests/debian.torrent")?;
         let peer_id = *b"01234567890123456789";
         let tracker_info = torrent.get_tracker_info(peer_id, 6881)?;
         println!("> TRACKER INFO FINAL:\n{:#?}", tracker_info);

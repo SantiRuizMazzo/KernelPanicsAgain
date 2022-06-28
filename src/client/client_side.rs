@@ -65,16 +65,6 @@ impl ClientSide {
     }
 
     pub fn new(port: i32) -> Result<ClientSide, String> {
-        /*let torrent = Torrent::from("tests/ultramarine.torrent")?;
-        let tracker_info = torrent.get_tracker_info(*b"12345678901234567890", 6881)?;
-        tracker_info.print();
-        let _ = SingleFile::new(0, "xd.txt".to_string());
-        let peer = Peer::new(None, "chau".to_string(), 0);
-        peer.print();
-        let _ = urlencoding::encode("上海+中國");
-        let config = Config::new(1111);
-        config.get_client_address();*/
-
         Ok(ClientSide {
             peer_id: ClientSide::generate_peer_id()?,
             config: Config::new(port),
@@ -82,16 +72,16 @@ impl ClientSide {
         })
     }
 
-    pub fn init_client(&mut self) -> Result<String, String> {
+    pub fn init_client(&mut self) -> Result<(), String> {
         self.run_client()
     }
 
     /// Client run receive an address and something readadble.
-    fn run_client(&mut self) -> Result<String, String> {
+    fn run_client(&mut self) -> Result<(), String> {
         if let Some(torrent) = self.torrents.first_mut() {
             torrent.start_download(self.peer_id)?;
         }
-        Ok("Successful download 😎🤙".to_string())
+        Ok(())
     }
 }
 
@@ -173,7 +163,7 @@ mod tests {
             .contains(&Torrent::from("tests/sample.torrent")?));
         assert!(client
             .torrents
-            .contains(&Torrent::from("tests/ubuntu.torrent")?));
+            .contains(&Torrent::from("tests/ubuntu2204.torrent")?));
         assert!(client
             .torrents
             .contains(&Torrent::from("tests/ultramarine.torrent")?));

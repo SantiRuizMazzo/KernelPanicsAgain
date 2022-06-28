@@ -10,13 +10,12 @@ pub fn run() -> Result<(), String> {
     let logger: Logger = Logger::new("logtest.txt".to_string())?;
     let mut client = ClientSide::new(8081)?;
     client.load_torrents(args())?;
-    println!("{:?}", client.get_id());
 
     let mut server = ServerSide::new(8081);
     server.set_peer_id(client.get_id());
     // Comentar el init del server para probar peers reales.
     //server.init_server();
-    println!("{}", client.init_client()?);
+    client.init_client()?;
 
     let log_peer_id = format!(
         "Client Peer ID: {}",

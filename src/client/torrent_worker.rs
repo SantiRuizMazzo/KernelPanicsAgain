@@ -1,52 +1,61 @@
-use crate::client::peer_protocol;
-
-use super::{peer::Peer, torrent_piece::TorrentPiece};
+use super::{peer::Peer, peer_protocol, torrent_piece::TorrentPiece};
 use std::{
     fs::OpenOptions,
     io::Write,
-    sync::{mpsc::Receiver, Arc, Mutex},
+    sync::{
+        mpsc::{Receiver, Sender},
+        Arc, Mutex,
+    },
     thread::{self, JoinHandle},
 };
 
 pub struct TorrentWorker {
-    thread: Option<JoinHandle<()>>,
+    thread: Option<JoinHandle<Result<(), String>>>,
 }
 
 impl TorrentWorker {
     pub fn new(
-        remote_peer: Peer,
+        peer: Peer,
         client_id: [u8; 20],
         info_hash: [u8; 20],
+        sender: Sender<TorrentPiece>,
         receiver: Arc<Mutex<Receiver<TorrentPiece>>>,
     ) -> TorrentWorker {
-        let thread = thread::spawn(move || loop {
-            if let Ok(receiver_locked) = receiver.lock() {
-                if let Ok(piece_to_download) = receiver_locked.recv() {
-                    println!("> PIECE TO DOWNLOAD: {:?}", piece_to_download);
-                    if let Ok(downloaded_bytes) = peer_protocol::handle_communication(
-                        remote_peer.clone(),
-                        client_id,
-                        info_hash,
-                        piece_to_download,
-                    ) {
-                        if let Ok(mut file) = OpenOptions::new()
-                            .write(true)
-                            .create(true)
-                            .open(format!("{}", piece_to_download.get_index()))
-                        {
-                            let _ = file.write_all(&downloaded_bytes);
-                            break;
-                        }
+        let thread = thread::spawn(move || {
+            let target_piece = receiver
+                .lock()
+                .map_err(|_| "mutex lock error".to_string())?
+                .recv()
+                .map_err(|_| "channel receiver error".to_string())?;
+
+            //A REVISAR!
+            drop(receiver);
+
+            println!("PIECE TO DOWNLOAD (INDEX): {}", target_piece.get_index());
+            println!("PEER TO CONNECT: {:?}", peer);
+            let piece =
+                match peer_protocol::download_piece(peer, client_id, info_hash, target_piece) {
+                    Ok(piece) => piece,
+                    Err(error) => {
+                        sender.send(target_piece).map_err(|err| err.to_string())?;
+                        return Err(error);
                     }
-                }
-            }
+                };
+
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(format!("{}", target_piece.get_index()))
+                .map_err(|err| err.to_string())?;
+            file.write_all(&piece).map_err(|err| err.to_string())
         });
+
         TorrentWorker {
             thread: Some(thread),
         }
     }
 
-    pub fn get_thread(&mut self) -> Option<JoinHandle<()>> {
+    pub fn get_thread(&mut self) -> Option<JoinHandle<Result<(), String>>> {
         self.thread.take()
     }
 }

@@ -1,6 +1,6 @@
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Piece {
-    index: u32,
+    pub index: u32,
     pub begin: u32,
     id: u8,
     pub block: Vec<u8>,

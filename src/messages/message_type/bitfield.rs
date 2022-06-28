@@ -18,6 +18,10 @@ impl Bitfield {
         }
     }
 
+    pub fn get_bits(&self) -> Vec<u8> {
+        self.bitfield.clone()
+    }
+
     /*pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         stream.write_all(&self.len.to_be_bytes())?;
         stream.write_all(&[self.id])?;

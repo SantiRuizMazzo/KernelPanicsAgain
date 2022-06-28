@@ -14,3 +14,7 @@ pub fn sha1(bytes: impl AsRef<[u8]>) -> Result<[u8; 20], String> {
 pub fn bytes_to_string(bytes: &[u8]) -> Result<String, String> {
     String::from_utf8(bytes.to_owned()).map_err(|err| err.to_string())
 }
+
+pub fn round_up(base: usize, multiple: usize) -> usize {
+    ((base + (multiple - 1)) / multiple) * multiple
+}
