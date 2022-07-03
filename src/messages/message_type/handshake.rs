@@ -35,10 +35,6 @@ impl HandShake {
         Ok(())
     }
 
-    /*pub fn set_peer_id(&mut self, peer_id: [u8; 20]) {
-        self.peer_id = peer_id;
-    }*/
-
     pub fn has_same_peer_id(&self, peer_id: Option<[u8; 20]>) -> bool {
         match peer_id {
             Some(id) => self.peer_id == id,

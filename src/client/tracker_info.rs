@@ -1,4 +1,4 @@
-use super::peer::Peer;
+use super::download::peer::Peer;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum TrackerInfoState {

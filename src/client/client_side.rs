@@ -80,7 +80,9 @@ impl ClientSide {
     fn run_client(&mut self) -> Result<(), String> {
         if let Some(torrent) = self.torrents.first_mut() {
             torrent.start_download(self.peer_id)?;
+            torrent.create_downloaded_files()?;
         }
+
         Ok(())
     }
 }

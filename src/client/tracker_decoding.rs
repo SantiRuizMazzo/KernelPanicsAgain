@@ -3,7 +3,7 @@ use super::{
         bdecoding::{BDecoder, BType},
         utils,
     },
-    peer::Peer,
+    download::peer::Peer,
     tracker_info::TrackerInfo,
 };
 use std::collections::HashMap;
@@ -74,9 +74,9 @@ fn failure_message(code: i64, description: &str) -> String {
 
 fn regular_peer_list(peers: &[BType]) -> Result<Vec<Peer>, String> {
     let mut peer_list = Vec::with_capacity(peers.len());
-    for peer in peers {
+    for (idx, peer) in peers.iter().enumerate() {
         match peer {
-            BType::Dictionary(peer_dict) => peer_list.push(peer_from_dict(peer_dict)?),
+            BType::Dictionary(peer_dict) => peer_list.push(peer_from_dict(peer_dict, idx)?),
             _ => return Err("some peer of the list is not a bencoded dictionary".to_string()),
         }
     }
@@ -87,7 +87,7 @@ fn regular_peer_list(peers: &[BType]) -> Result<Vec<Peer>, String> {
     Ok(peer_list)
 }
 
-fn peer_from_dict(peer_dict: &HashMap<String, BType>) -> Result<Peer, String> {
+fn peer_from_dict(peer_dict: &HashMap<String, BType>, index: usize) -> Result<Peer, String> {
     let id = match peer_dict.get("peer id") {
         Some(BType::String(id)) => peer_id_from_bytes(id),
         _ => None,
@@ -103,7 +103,7 @@ fn peer_from_dict(peer_dict: &HashMap<String, BType>) -> Result<Peer, String> {
         _ => return Err("port key not present in peer dictionary".to_string()),
     };
 
-    Ok(Peer::new(id, ip, port))
+    Ok(Peer::new(id, ip, port, index))
 }
 
 fn peer_id_from_bytes(peer_id: &[u8]) -> Option<[u8; 20]> {
@@ -115,10 +115,10 @@ fn peer_id_from_bytes(peer_id: &[u8]) -> Option<[u8; 20]> {
 
 fn compact_peer_list(peers: &[u8]) -> Result<Vec<Peer>, String> {
     let mut peer_list = Vec::with_capacity(peers.len() / 6);
-    for peer in peers.chunks_exact(6) {
+    for (idx, peer) in peers.chunks_exact(6).enumerate() {
         let ip = format!("{}.{}.{}.{}", peer[0], peer[1], peer[2], peer[3]);
         let port = u32::from_be_bytes([0, 0, peer[4], peer[5]]);
-        peer_list.push(Peer::new(None, ip, port));
+        peer_list.push(Peer::new(None, ip, port, idx));
     }
     if peer_list.is_empty() {
         return Err("could not load any peers to the peers list".to_string());

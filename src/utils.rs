@@ -1,3 +1,9 @@
+use std::{
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
+
 use sha1::{Digest, Sha1};
 
 /// Returns a 20-byte array containing the result of applying SHA1 hash algorithm to the given collection of bytes.
@@ -17,4 +23,19 @@ pub fn bytes_to_string(bytes: &[u8]) -> Result<String, String> {
 
 pub fn round_up(base: usize, multiple: usize) -> usize {
     ((base + (multiple - 1)) / multiple) * multiple
+}
+
+pub fn read_piece_file(download_path: String, piece_index: usize) -> Result<Vec<u8>, String> {
+    let path_str: String = download_path + &piece_index.to_string();
+    let path = Path::new(&path_str);
+    let mut file = File::open(path).map_err(|err| err.to_string())?;
+    let mut read_bytes = Vec::new();
+    file.read_to_end(&mut read_bytes)
+        .map_err(|err| err.to_string())?;
+    Ok(read_bytes)
+}
+
+pub fn append_to_file(file: &mut File, bytes_to_append: Vec<u8>) -> Result<(), String> {
+    file.write_all(&bytes_to_append)
+        .map_err(|err| err.to_string())
 }

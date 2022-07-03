@@ -1,17 +1,25 @@
-use super::{
-    super::urlencoding, single_file::SingleFile, torrent_decoding, torrent_piece::TorrentPiece,
-    tracker_decoding, tracker_info::TrackerInfo,
+use crate::{
+    client::{
+        download::download_pool::DownloadPool,
+        single_file::SingleFile,
+        torrent_decoding,
+        torrent_piece::TorrentPiece,
+        tracker_decoding,
+        tracker_info::{TrackerInfo, TrackerInfoState},
+    },
+    urlencoding,
+    utils::{append_to_file, read_piece_file, self},
 };
-use crate::client::{torrent_worker::TorrentWorker, tracker_info::TrackerInfoState};
 use native_tls::TlsConnector;
 use std::{
     collections::HashMap,
-    fs,
+    fs::{self, OpenOptions},
     io::{Read, Write},
     net::TcpStream,
     path::Path,
-    sync::{mpsc, Arc, Mutex},
 };
+
+const TOTAL_WORKERS: usize = 20;
 
 /// Represents a web server complete address.
 #[derive(Debug)]
@@ -82,8 +90,8 @@ impl Torrent {
         let tracker_addr = self.tracker_address()?;
         let query_dict = self.query_string_dict(peer_id, port)?;
         let tracker_req = self.tracker_request(&tracker_addr.domain, query_dict);
-        println!("TRACKER REQUEST: {tracker_req}");
         let tracker_res = self.tracker_communication(tracker_addr, tracker_req)?;
+        //println!("TRACKER RESPONSE:\n{}", String::from_utf8_lossy(&tracker_res));
         tracker_decoding::tracker_info_from_bytes(self.response_body(tracker_res)?)
     }
 
@@ -197,45 +205,58 @@ impl Torrent {
             .tracker_info
             .get_peers()
             .ok_or_else(|| "no peer list loaded".to_string())?;
-        println!("TOTAL PEERS: {}", peers.len());
-        println!("TOTAL PIECES: {}", self.pieces.len());
 
-        let (sender, receiver) = mpsc::channel::<TorrentPiece>();
-        let receiver = Arc::new(Mutex::new(receiver));
-
-        for &piece in &self.pieces {
-            sender.send(piece).map_err(|err| err.to_string())?
-        }
-
-        let mut worker = TorrentWorker::new(
-            peers[0].clone(),
+        println!("TOTAL PIECES {}", self.pieces.len());
+        println!("TOTAL PEERS {}", peers.len());
+        //self.pieces = vec![self.pieces.remove(self.pieces.len() - 1)];
+        DownloadPool::new(
+            TOTAL_WORKERS,
+            &self.pieces,
+            &peers,
             client_id,
             self.info_hash,
-            sender,
-            Arc::clone(&receiver),
-        );
+        )?;
+        Ok(())
+    }
 
-        if let Some(worker_thread) = worker.get_thread() {
-            worker_thread.join().map_err(|_| String::new())??;
-        }
+    pub fn create_downloaded_files(&self) -> Result<(), String> {
+        let mut current_piece_index = 0_usize;
+        let mut piece_offset = 0;
 
-        /*let mut workers = Vec::with_capacity(peers.len());
-        for peer in peers {
-            workers.push(TorrentWorker::new(
-                peer,
-                client_id,
-                self.info_hash,
-                sender.clone(),
-                Arc::clone(&receiver),
-            ));
-        }
+        for file in &self.files {
+            let mut opened_file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(format!("downloads/{}", file.path.clone()))
+                .map_err(|err| err.to_string())?;
 
-        for worker in workers.iter_mut() {
-            if let Some(worker_thread) = worker.get_thread() {
-                worker_thread.join().map_err(|_| String::new())??;
+            println!("{opened_file:?}");
+            let mut saved_file_length = 0_usize;
+            let file_length = file.length as usize;
+
+            while saved_file_length < file_length {
+                let read_bytes = read_piece_file("downloads/".to_string(), current_piece_index)?;
+                let missing_bytes = file_length - saved_file_length;
+
+                if (read_bytes.len() - piece_offset) > missing_bytes {
+                    append_to_file(
+                        &mut opened_file,
+                        read_bytes[piece_offset..(piece_offset + missing_bytes)].to_vec(),
+                    )?;
+                    saved_file_length += missing_bytes - piece_offset;
+                    piece_offset += missing_bytes;
+                } else {
+                    append_to_file(
+                        &mut opened_file,
+                        read_bytes[piece_offset..read_bytes.len()].to_vec(),
+                    )?;
+                    saved_file_length += read_bytes.len() - piece_offset;
+                    piece_offset = 0;
+                    current_piece_index += 1;
+                }
             }
-        }*/
-
+        }
         Ok(())
     }
 }

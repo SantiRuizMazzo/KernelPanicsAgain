@@ -1,5 +1,5 @@
 /// Stores information about each file that is meant to be downloaded from a multiple-file .torrent file.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct SingleFile {
     pub length: i64,
     pub path: String,

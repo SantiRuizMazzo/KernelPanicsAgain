@@ -17,6 +17,10 @@ impl Have {
         }
     }
 
+    pub fn get_index(&self) -> u32 {
+        self.index
+    }
+
     /*pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
          stream.write_all(&[0])?;
           stream.write_all(&[0])?;

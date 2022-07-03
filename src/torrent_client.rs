@@ -4,16 +4,15 @@ use crate::{
     server::server_side::ServerSide,
     utils,
 };
-use std::env::args;
+use std::env;
 
 pub fn run() -> Result<(), String> {
     let logger: Logger = Logger::new("logtest.txt".to_string())?;
     let mut client = ClientSide::new(8081)?;
-    client.load_torrents(args())?;
+    client.load_torrents(env::args())?;
 
     let mut server = ServerSide::new(8081);
     server.set_peer_id(client.get_id());
-    // Comentar el init del server para probar peers reales.
     //server.init_server();
     client.init_client()?;
 
