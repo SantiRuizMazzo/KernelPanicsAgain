@@ -8,7 +8,7 @@ use crate::{
         tracker_info::{TrackerInfo, TrackerInfoState},
     },
     urlencoding,
-    utils::{append_to_file, read_piece_file, self},
+    utils::{append_to_file, read_piece_file},
 };
 use native_tls::TlsConnector;
 use std::{
@@ -54,6 +54,7 @@ pub struct Torrent {
     files: Vec<SingleFile>,
     info_hash: [u8; 20],
     tracker_info: TrackerInfoState,
+    index: usize,
 }
 
 impl Torrent {
@@ -64,6 +65,7 @@ impl Torrent {
         pieces: Vec<TorrentPiece>,
         files: Vec<SingleFile>,
         info_hash: [u8; 20],
+        index: usize,
     ) -> Torrent {
         Torrent {
             announce,
@@ -72,9 +74,15 @@ impl Torrent {
             files,
             info_hash,
             tracker_info: TrackerInfoState::Unset,
+            index,
         }
     }
-
+    pub fn set_index(&mut self, index: usize) {
+        self.index = index;
+        for piece in self.pieces.iter_mut() {
+            piece.set_torrent_index(index);
+        }
+    }
     /// Attempts to decode a .torrent file located at `path`, and build a `Torrent` struct with its data (if possible).
     pub fn from<P>(path: P) -> Result<Torrent, String>
     where
@@ -199,7 +207,11 @@ impl Torrent {
     }
 
     /// Starts torrent download by requesting tracker info and connecting to peers
-    pub fn start_download(&mut self, client_id: [u8; 20]) -> Result<(), String> {
+    pub fn start_download(
+        &mut self,
+        client_id: [u8; 20],
+        torrent_index: usize,
+    ) -> Result<(), String> {
         self.tracker_info = TrackerInfoState::Set(self.get_tracker_info(client_id, 6881)?);
         let peers = self
             .tracker_info
@@ -209,17 +221,19 @@ impl Torrent {
         println!("TOTAL PIECES {}", self.pieces.len());
         println!("TOTAL PEERS {}", peers.len());
         //self.pieces = vec![self.pieces.remove(self.pieces.len() - 1)];
-        DownloadPool::new(
+        let pool = DownloadPool::new(
             TOTAL_WORKERS,
             &self.pieces,
             &peers,
             client_id,
             self.info_hash,
         )?;
+        drop(pool);
+        self.create_downloaded_files(torrent_index)?;
         Ok(())
     }
 
-    pub fn create_downloaded_files(&self) -> Result<(), String> {
+    pub fn create_downloaded_files(&self, torrent_index: usize) -> Result<(), String> {
         let mut current_piece_index = 0_usize;
         let mut piece_offset = 0;
 
@@ -228,7 +242,11 @@ impl Torrent {
                 .create(true)
                 .write(true)
                 .append(true)
-                .open(format!("downloads/{}", file.path.clone()))
+                .open(format!(
+                    "downloads/tmp{}/{}",
+                    torrent_index,
+                    file.path.clone()
+                ))
                 .map_err(|err| err.to_string())?;
 
             println!("{opened_file:?}");
@@ -236,7 +254,8 @@ impl Torrent {
             let file_length = file.length as usize;
 
             while saved_file_length < file_length {
-                let read_bytes = read_piece_file("downloads/".to_string(), current_piece_index)?;
+                let str_path = format!("downloads/tmp{}/", torrent_index);
+                let read_bytes = read_piece_file(str_path, current_piece_index)?;
                 let missing_bytes = file_length - saved_file_length;
 
                 if (read_bytes.len() - piece_offset) > missing_bytes {

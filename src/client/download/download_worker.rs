@@ -1,8 +1,9 @@
 use super::{download_info::DownloadInfo, peer::Peer};
 use crate::client::{download::peer_protocol::DownloadError, torrent_piece::TorrentPiece};
 use std::{
-    fs::OpenOptions,
+    fs::{self, OpenOptions},
     io::Write,
+    path::Path,
     sync::{
         mpsc::{Receiver, Sender},
         Arc, Mutex,
@@ -108,10 +109,20 @@ impl DownloadWorker {
                 downloaded.push(target_piece);
                 drop(downloaded);
 
+                let string_path = format!(
+                    "downloads/tmp{}/{}",
+                    target_piece.get_torrent_index(),
+                    target_piece.get_index()
+                );
+                let download_file_path = Path::new(&string_path);
+                if let Some(p) = download_file_path.parent() {
+                    fs::create_dir_all(p).map_err(|err| err.to_string())?
+                };
+
                 let mut file = OpenOptions::new()
                     .write(true)
                     .create(true)
-                    .open(format!("downloads/{}", target_piece.get_index()))
+                    .open(download_file_path)
                     .map_err(|err| err.to_string())?;
                 file.write_all(&piece).map_err(|err| err.to_string())?;
 

@@ -78,9 +78,9 @@ impl ClientSide {
 
     /// Client run receive an address and something readadble.
     fn run_client(&mut self) -> Result<(), String> {
-        if let Some(torrent) = self.torrents.first_mut() {
-            torrent.start_download(self.peer_id)?;
-            torrent.create_downloaded_files()?;
+        for (index, torrent) in self.torrents.iter_mut().enumerate() {
+            torrent.set_index(index);
+            torrent.start_download(self.peer_id, index)?;
         }
 
         Ok(())

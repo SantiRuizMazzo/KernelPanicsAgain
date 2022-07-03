@@ -3,6 +3,7 @@ pub struct TorrentPiece {
     index: usize,
     length: usize,
     hash: [u8; 20],
+    torrent_index: usize,
 }
 
 impl TorrentPiece {
@@ -11,9 +12,16 @@ impl TorrentPiece {
             index,
             length,
             hash,
+            torrent_index: 0,
         }
     }
 
+    pub fn set_torrent_index(&mut self, index: usize) {
+        self.torrent_index = index;
+    }
+    pub fn get_torrent_index(&self) -> usize {
+        self.torrent_index
+    }
     pub fn get_index(&self) -> usize {
         self.index
     }
