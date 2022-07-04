@@ -2,8 +2,8 @@ pub mod main_window;
 use std::{borrow::Borrow, sync::mpsc};
 
 use gtk::{glib, prelude::*, ApplicationWindow, Builder};
-use patk_bittorrent_client::client::client_side::ClientSide;
 use patk_bittorrent_client::torrent_client::run_ui;
+use patk_bittorrent_client::{client::client_side::ClientSide, config::Config};
 
 fn build_main_window(application: &gtk::Application, builder: Builder) -> ApplicationWindow {
     let window: ApplicationWindow = builder.object("main_window").expect("problema");
@@ -99,7 +99,8 @@ fn main() -> Result<(), String> {
         gtk::Application::new(Some("com.Panick_at_the_kernel.ui"), Default::default());
 
     //let (peer_tx, peer_rx) = mpsc::channel::<Peer>();
-    let client = ClientSide::new(8081)?;
+    let config = Config::new()?;
+    let client = ClientSide::new(config)?;
     application.connect_activate(move |app| {
         let window = init_main_window(app, client.clone());
         window.show();

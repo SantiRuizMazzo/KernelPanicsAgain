@@ -1,6 +1,6 @@
 mod bdecoding;
 pub mod client;
-mod config;
+pub mod config;
 mod logger;
 mod messages;
 mod server;

@@ -1,17 +1,14 @@
-//use crate::config::Config;
-//use crate::messages::message_parser;
-//use std::io::Read;
-//use std::net::{TcpListener};
+use crate::config::Config;
 
 pub struct ServerSide {
-    //config: Config,
+    config: Config,
     peer_id: [u8; 20],
 }
 
 impl ServerSide {
-    pub fn new(_port: i32) -> ServerSide {
+    pub fn new(config: Config) -> ServerSide {
         ServerSide {
-            //config: Config::new(port),
+            config,
             peer_id: [0; 20],
         }
     }

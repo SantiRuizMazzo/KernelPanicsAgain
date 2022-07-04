@@ -64,10 +64,10 @@ impl ClientSide {
         Ok(())
     }
 
-    pub fn new(port: i32) -> Result<ClientSide, String> {
+    pub fn new(config: Config) -> Result<ClientSide, String> {
         Ok(ClientSide {
             peer_id: ClientSide::generate_peer_id()?,
-            config: Config::new(port),
+            config,
             torrents: Vec::new(),
         })
     }
@@ -81,7 +81,6 @@ impl ClientSide {
         for (index, torrent) in self.torrents.iter_mut().enumerate() {
             torrent.set_index(index);
             torrent.start_download(self.peer_id, index)?;
-
         }
 
         Ok(())
@@ -101,21 +100,21 @@ mod tests {
 
     #[test]
     fn generate_correctly_sized_peer_id_inside_client_side_struct() -> Result<(), String> {
-        let client = ClientSide::new(8081)?;
+        let client = ClientSide::new(Config::new()?)?;
         assert_eq!(20, client.peer_id.len() * std::mem::size_of::<u8>());
         Ok(())
     }
 
     #[test]
     fn client_generator() -> Result<(), String> {
-        let client = ClientSide::new(8081)?;
+        let client = ClientSide::new(Config::new()?)?;
         assert_eq!(20, client.peer_id.len() * std::mem::size_of::<u8>());
         Ok(())
     }
 
     #[test]
     fn load_a_single_torrent_from_a_path_to_file() -> Result<(), String> {
-        let mut client = ClientSide::new(8081)?;
+        let mut client = ClientSide::new(Config::new()?)?;
         let command_line_args = vec!["tests/debian.torrent".to_string()].into_iter();
         client.load_torrents(command_line_args)?;
         assert_eq!(
@@ -127,7 +126,7 @@ mod tests {
 
     #[test]
     fn load_multiple_torrents_from_multiple_paths_to_files() -> Result<(), String> {
-        let mut client = ClientSide::new(8081)?;
+        let mut client = ClientSide::new(Config::new()?)?;
         let command_line_args = vec![
             "tests/debian.torrent".to_string(),
             "tests/fedora.torrent".to_string(),
@@ -146,7 +145,7 @@ mod tests {
 
     #[test]
     fn load_multiple_torrents_from_a_path_to_directory() -> Result<(), String> {
-        let mut client = ClientSide::new(8081)?;
+        let mut client = ClientSide::new(Config::new()?)?;
         let command_line_args = vec!["tests".to_string()].into_iter();
         client.load_torrents(command_line_args)?;
         assert!(client
@@ -176,7 +175,7 @@ mod tests {
 
     #[test]
     fn load_torrents_from_path_to_directory_without_torrents_should_fail() -> Result<(), String> {
-        let mut client = ClientSide::new(8081)?;
+        let mut client = ClientSide::new(Config::new()?)?;
         let args = vec!["src".to_string()].into_iter();
         assert!(client.load_torrents(args).is_err());
         Ok(())
