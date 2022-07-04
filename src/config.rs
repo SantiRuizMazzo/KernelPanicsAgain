@@ -1,3 +1,4 @@
+#[derive(Clone)]
 pub struct Config {
     pub tcp_port: i32,
 }

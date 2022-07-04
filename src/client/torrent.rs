@@ -46,7 +46,7 @@ impl ServerAddr {
 }
 
 /// Stores the information that a .torrent file contains.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Torrent {
     announce: String,
     piece_length: usize,
@@ -230,6 +230,7 @@ impl Torrent {
         )?;
         drop(pool);
         self.create_downloaded_files(torrent_index)?;
+
         Ok(())
     }
 

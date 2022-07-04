@@ -9,5 +9,10 @@ edition = "2021"
 sha1 = "0.10.1"
 rand = "0.8.5"
 log = { version = "0.4.17", features = ["std", "serde"] }
+gtk = "0.15.5"
 chrono = "0.4.19"
 native-tls = "0.2.10"
+
+[[bin]]
+name = "ui_test"
+path = "./UI/main.rs"

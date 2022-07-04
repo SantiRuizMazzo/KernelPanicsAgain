@@ -1,6 +1,6 @@
 use super::download::peer::Peer;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TrackerInfoState {
     Set(TrackerInfo),
     Unset,
@@ -16,7 +16,7 @@ impl TrackerInfoState {
 }
 
 /// Stores the information received in a tracker response message.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct TrackerInfo {
     interval: u32,
     peers: Vec<Peer>,

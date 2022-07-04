@@ -1,5 +1,5 @@
 mod bdecoding;
-mod client;
+pub mod client;
 mod config;
 mod logger;
 mod messages;

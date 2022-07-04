@@ -2,7 +2,7 @@ use crate::client::torrent::Torrent;
 use crate::config::Config;
 use rand::Rng;
 use std::{fs, ops::Deref, path::Path};
-
+#[derive(Clone)]
 pub struct ClientSide {
     pub peer_id: [u8; 20],
     pub config: Config,
@@ -81,6 +81,7 @@ impl ClientSide {
         for (index, torrent) in self.torrents.iter_mut().enumerate() {
             torrent.set_index(index);
             torrent.start_download(self.peer_id, index)?;
+
         }
 
         Ok(())
