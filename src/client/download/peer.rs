@@ -48,7 +48,7 @@ impl Peer {
     pub fn connect(&mut self, download: DownloadInfo) -> Result<TcpStream, DownloadError> {
         match TcpStream::connect(self.get_address()) {
             Ok(mut stream) => {
-                peer_protocol::handle_handshake(&mut stream, self.id, download)
+                peer_protocol::handle_handshake(&mut stream, download)
                     .map_err(DownloadError::Connection)?;
                 Ok(stream)
             }

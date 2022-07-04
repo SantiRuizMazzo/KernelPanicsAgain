@@ -16,13 +16,9 @@ pub enum DownloadError {
     Piece(String),
 }
 
-pub fn handle_handshake(
-    stream: &mut TcpStream,
-    peer_id: Option<[u8; 20]>,
-    download: DownloadInfo,
-) -> Result<(), String> {
+pub fn handle_handshake(stream: &mut TcpStream, download: DownloadInfo) -> Result<(), String> {
     handle_hs_sending(stream, download)?;
-    handle_hs_receiving(stream, peer_id)?;
+    handle_hs_receiving(stream)?;
     Ok(())
 }
 
@@ -37,7 +33,7 @@ fn handle_hs_sending(stream: &mut TcpStream, download: DownloadInfo) -> Result<(
     Ok(())
 }
 
-fn handle_hs_receiving(stream: &mut TcpStream, peer_id: Option<[u8; 20]>) -> Result<(), String> {
+fn handle_hs_receiving(stream: &mut TcpStream) -> Result<(), String> {
     let mut pstrlen = [0];
     let mut read = stream.read(&mut pstrlen).map_err(|err| err.to_string())?;
     if read != 1 {
@@ -68,8 +64,7 @@ fn handle_hs_receiving(stream: &mut TcpStream, peer_id: Option<[u8; 20]>) -> Res
         .try_into()
         .map_err(|_| "conversion error".to_string())?;
 
-    let handshake_response = HandShake::new(pstr, reserved, info_hash, read_peer_id);
-    if handshake_response.has_same_peer_id(peer_id) {}
+    let _ = HandShake::new(pstr, reserved, info_hash, read_peer_id);
     Ok(())
 }
 
