@@ -10,7 +10,7 @@ pub enum Message {
     Log(String),
     Terminate,
 }
-//use std::sync;
+
 impl Logger {
     pub fn new(path: String) -> Result<Logger, String> {
         let (sender, receiver) = mpsc::channel();
@@ -32,7 +32,6 @@ impl Logger {
 }
 impl Drop for Logger {
     fn drop(&mut self) {
-        // Either discard errors or panic for failed drop
         let _ = self.sender.send(Message::Terminate);
         if let Some(thread) = self.worker.thread.take() {
             let _ = thread.join();

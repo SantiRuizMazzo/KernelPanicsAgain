@@ -15,7 +15,6 @@ impl Interested {
     pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
         stream.write_all(&u32::to_be_bytes(self.len))?;
         stream.write_all(&[self.id])?;
-        //println!("> SENT 😉: {:?}", self);
         Ok(())
     }
 }

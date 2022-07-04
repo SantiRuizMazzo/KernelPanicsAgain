@@ -16,7 +16,6 @@ impl LoggerWorker {
             if let Ok(message) = receiver.recv() {
                 match message {
                     Message::Log(string) => {
-                        println!("{}", string);
                         let local: DateTime<Local> = Local::now();
                         if let Err(e) = writeln!(file, "{} - {}", local, string) {
                             eprintln!("Couldn't write to file: {}", e);
@@ -27,8 +26,6 @@ impl LoggerWorker {
                     }
                 }
             };
-
-            //println!("Worker {} got a job; executing.", id);
         });
         LoggerWorker {
             thread: Some(thread),

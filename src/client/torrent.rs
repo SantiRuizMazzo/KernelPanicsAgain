@@ -7,6 +7,7 @@ use crate::{
         tracker_decoding,
         tracker_info::{TrackerInfo, TrackerInfoState},
     },
+    logger::torrent_logger::Message,
     urlencoding,
     utils::{append_to_file, read_piece_file},
 };
@@ -17,6 +18,7 @@ use std::{
     io::{Read, Write},
     net::TcpStream,
     path::Path,
+    sync::mpsc::Sender,
 };
 
 const TOTAL_WORKERS: usize = 20;
@@ -99,7 +101,6 @@ impl Torrent {
         let query_dict = self.query_string_dict(peer_id, port)?;
         let tracker_req = self.tracker_request(&tracker_addr.domain, query_dict);
         let tracker_res = self.tracker_communication(tracker_addr, tracker_req)?;
-        //println!("TRACKER RESPONSE:\n{}", String::from_utf8_lossy(&tracker_res));
         tracker_decoding::tracker_info_from_bytes(self.response_body(tracker_res)?)
     }
 
@@ -211,6 +212,7 @@ impl Torrent {
         &mut self,
         client_id: [u8; 20],
         torrent_index: usize,
+        logger_sender: Sender<Message>,
     ) -> Result<(), String> {
         self.tracker_info = TrackerInfoState::Set(self.get_tracker_info(client_id, 6881)?);
         let peers = self
@@ -218,15 +220,13 @@ impl Torrent {
             .get_peers()
             .ok_or_else(|| "no peer list loaded".to_string())?;
 
-        println!("TOTAL PIECES {}", self.pieces.len());
-        println!("TOTAL PEERS {}", peers.len());
-        //self.pieces = vec![self.pieces.remove(self.pieces.len() - 1)];
         let pool = DownloadPool::new(
             TOTAL_WORKERS,
             &self.pieces,
             &peers,
             client_id,
             self.info_hash,
+            logger_sender,
         )?;
         drop(pool);
         self.create_downloaded_files(torrent_index)?;
@@ -250,7 +250,6 @@ impl Torrent {
                 ))
                 .map_err(|err| err.to_string())?;
 
-            println!("{opened_file:?}");
             let mut saved_file_length = 0_usize;
             let file_length = file.length as usize;
 

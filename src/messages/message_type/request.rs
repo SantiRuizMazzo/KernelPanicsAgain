@@ -37,7 +37,6 @@ impl Request {
             stream.write_all(&self.length.to_be_bytes())?;
         }
         self.sent = true;
-        //println!("> SENT 📤: {:?}", self);
         Ok(())
     }
 

@@ -1,5 +1,8 @@
 use super::{download_info::DownloadInfo, peer::Peer};
-use crate::client::{download::peer_protocol::DownloadError, torrent_piece::TorrentPiece};
+use crate::{
+    client::{download::peer_protocol::DownloadError, torrent_piece::TorrentPiece},
+    logger::torrent_logger::Message,
+};
 use std::{
     fs::{self, OpenOptions},
     io::Write,
@@ -22,7 +25,6 @@ pub struct DownloadWorker {
 
 impl DownloadWorker {
     pub fn new(
-        id: usize,
         download: DownloadInfo,
         (piece_tx, piece_rx_mutex): (
             Sender<DownloadMessage>,
@@ -32,6 +34,7 @@ impl DownloadWorker {
         blacklist_mutex: Arc<Mutex<Vec<Peer>>>,
         downloaded_mutex: Arc<Mutex<Vec<TorrentPiece>>>,
         kill_tx: Sender<DownloadMessage>,
+        logger_sender: Sender<Message>,
     ) -> DownloadWorker {
         let thread = thread::spawn(move || {
             let mut peer = Peer::new(Some(download.get_id()), "".to_string(), 80, 0);
@@ -47,7 +50,9 @@ impl DownloadWorker {
                 drop(downloaded);
 
                 let progress = (current_pieces as f32 * 100_f32) / (total_pieces as f32);
-                println!("DOWNLOADED PIECES: {progress:.2}% ({current_pieces}/{total_pieces}) | WORKER {id}");
+                let _ = logger_sender.send(Message::Log(format!(
+                    "DOWNLOADED PIECES: {progress:.2}% ({current_pieces}/{total_pieces})"
+                )));
                 if current_pieces == total_pieces {
                     kill_tx
                         .send(DownloadMessage::Kill)
@@ -83,22 +88,20 @@ impl DownloadWorker {
                 }
 
                 (connection, piece) =
-                    match peer.download(target_piece, connection, id, total_pieces, download) {
+                    match peer.download(target_piece, connection, total_pieces, download) {
                         Ok((stream, piece)) => (Some(stream), piece),
-                        Err(DownloadError::Connection(err)) => {
+                        Err(DownloadError::Connection(_)) => {
                             update_blacklist(&blacklist_mutex, &peer, &peer_tx)?;
                             connection = None;
-                            println!("ERROR {err} | WORKER {id}");
                             continue;
                         }
-                        Err(DownloadError::Piece(err)) => {
+                        Err(DownloadError::Piece(_)) => {
                             piece_tx
                                 .send(DownloadMessage::Piece(target_piece))
                                 .map_err(|err| err.to_string())?;
                             current_piece = None;
                             peer_tx.send(peer.clone()).map_err(|err| err.to_string())?;
                             connection = None;
-                            println!("ERROR {err} | WORKER {id}");
                             continue;
                         }
                     };

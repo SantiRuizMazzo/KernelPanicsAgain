@@ -60,16 +60,9 @@ impl Peer {
         &mut self,
         piece: TorrentPiece,
         connection: Option<TcpStream>,
-        worker_id: usize,
         total_pieces: usize,
         download: DownloadInfo,
     ) -> Result<(TcpStream, Vec<u8>), DownloadError> {
-        println!(
-            "TRYING TO DOWNLOAD PIECE {} FROM PEER {} | WORKER {worker_id}",
-            piece.get_index(),
-            self.index
-        );
-
         let mut cur_request = Request::new(piece.get_index() as u32, 0, BLOCK_SIZE);
 
         match connection {
@@ -77,12 +70,12 @@ impl Peer {
                 cur_request
                     .send(&mut stream)
                     .map_err(|err| DownloadError::Connection(err.to_string()))?;
-                self.messages_loop(stream, cur_request, piece, worker_id)
+                self.messages_loop(stream, cur_request, piece)
             }
             None => {
                 let stream = self.connect(download)?;
                 self.bitfield = vec![0; total_pieces];
-                self.messages_loop(stream, cur_request, piece, worker_id)
+                self.messages_loop(stream, cur_request, piece)
             }
         }
     }
@@ -92,7 +85,6 @@ impl Peer {
         mut stream: TcpStream,
         mut cur_request: Request,
         piece: TorrentPiece,
-        worker_id: usize,
     ) -> Result<(TcpStream, Vec<u8>), DownloadError> {
         let mut downloaded = Vec::<u8>::with_capacity(piece.get_length());
         loop {
@@ -103,7 +95,6 @@ impl Peer {
 
             let bytes_read = read_id_and_payload(&mut stream, len)?;
             let message = message_parser::parse(bytes_read).map_err(DownloadError::Piece)?;
-            //println!("< RECEIVED: {:?}", message);
 
             match message {
                 TorrentMessage::Bitfield(msg) => {
@@ -135,7 +126,6 @@ impl Peer {
                         &mut downloaded,
                         piece,
                         &mut cur_request,
-                        worker_id,
                         self.am_choked,
                     )?;
                     if bytes_downloaded == piece.get_length() {

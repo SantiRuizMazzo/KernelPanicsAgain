@@ -3,7 +3,7 @@ use super::{
     download_worker::{DownloadMessage, DownloadWorker},
     peer::Peer,
 };
-use crate::client::torrent_piece::TorrentPiece;
+use crate::{client::torrent_piece::TorrentPiece, logger::torrent_logger::Message};
 use std::sync::{
     mpsc::{self, Receiver, Sender},
     Arc, Mutex,
@@ -27,6 +27,7 @@ impl DownloadPool {
         peers: &[Peer],
         client_id: [u8; 20],
         info_hash: [u8; 20],
+        logger_sender: Sender<Message>,
     ) -> Result<DownloadPool, String> {
         let pieces_handle = setup_pieces_queue(pieces)?;
         let peers_handle = setup_peers_queue(peers)?;
@@ -38,15 +39,15 @@ impl DownloadPool {
         let download = DownloadInfo::new(client_id, info_hash);
         let mut workers = Vec::with_capacity(size);
 
-        for id in 0..workers.capacity() {
+        for _ in 0..workers.capacity() {
             workers.push(DownloadWorker::new(
-                id,
                 download,
                 pieces_handle.clone(),
                 peers_handle.clone(),
                 blacklist.clone(),
                 downloaded.clone(),
                 kill_handle.0.clone(),
+                logger_sender.clone(),
             ));
         }
 

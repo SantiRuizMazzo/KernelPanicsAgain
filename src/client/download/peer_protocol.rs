@@ -16,80 +16,6 @@ pub enum DownloadError {
     Piece(String),
 }
 
-/*pub fn download_piece(
-    piece: TorrentPiece,
-    connection: &mut Option<TcpStream>,
-    worker_id: usize,
-    total_pieces: usize,
-) -> Result<Vec<u8>, String> {
-    /*let stream = match connection {
-        Some(stream) => stream,
-        None => return Err("no peer connection to download from".to_string()),
-    };
-
-    let mut cur_request = Request::new(piece.get_index() as u32, 0, BLOCK_SIZE);
-    let mut downloaded = Vec::<u8>::with_capacity(piece.get_length());
-    let mut bitfield = vec![0; total_pieces];
-    let mut am_choked = true;
-    let mut am_interested = false;
-
-    loop {
-        println!(
-            "ANTES DE READ LEN | PIECE {} | WORKER {worker_id}",
-            piece.get_index()
-        );
-        let len = read_len(stream)?;
-        println!(
-            "DESPUES DE READ LEN | PIECE {} | WORKER {worker_id}",
-            piece.get_index()
-        );
-        if len == 0 {
-            continue;
-        }
-
-        let bytes_read = read_id_and_payload(stream, len)?;
-        let message = message_parser::parse(bytes_read)?;
-        //println!("< RECEIVED: {:?}", message);
-
-        match message {
-            TorrentMessage::Bitfield(msg) => {
-                bitfield = handle_bitfield(
-                    stream,
-                    msg.get_bits(),
-                    piece.get_index(),
-                    &mut am_interested,
-                )?;
-            }
-            TorrentMessage::Have(msg) => handle_have(
-                stream,
-                msg,
-                &mut bitfield,
-                &mut am_interested,
-                piece.get_index(),
-            )?,
-            TorrentMessage::Unchoke(_) => {
-                handle_unchoke(stream, &mut cur_request, &mut am_choked, am_interested)?
-            }
-            TorrentMessage::Choke(_) => handle_choke(&mut cur_request, &mut am_choked),
-            TorrentMessage::Piece(msg) => {
-                let bytes_downloaded = handle_piece(
-                    stream,
-                    msg,
-                    &mut downloaded,
-                    piece,
-                    &mut cur_request,
-                    worker_id,
-                    am_choked,
-                )?;
-                if bytes_downloaded == piece.get_length() {
-                    break;
-                }
-            }
-        }
-    }
-    Ok(downloaded)*/
-}*/
-
 pub fn handle_handshake(
     stream: &mut TcpStream,
     peer_id: Option<[u8; 20]>,
@@ -108,7 +34,6 @@ fn handle_hs_sending(stream: &mut TcpStream, download: DownloadInfo) -> Result<(
         download.get_id(),
     );
     handshake.send(stream).map_err(|err| err.to_string())?;
-    //println!("> SENT 🤝: {:?}", handshake);
     Ok(())
 }
 
@@ -144,9 +69,7 @@ fn handle_hs_receiving(stream: &mut TcpStream, peer_id: Option<[u8; 20]>) -> Res
         .map_err(|_| "conversion error".to_string())?;
 
     let handshake_response = HandShake::new(pstr, reserved, info_hash, read_peer_id);
-    if handshake_response.has_same_peer_id(peer_id) {
-        //println!("< RECEIVED 🤝: {:?}", handshake_response);
-    }
+    if handshake_response.has_same_peer_id(peer_id) {}
     Ok(())
 }
 
@@ -245,7 +168,6 @@ pub fn handle_piece(
     downloaded: &mut Vec<u8>,
     piece: TorrentPiece,
     cur_request: &mut Request,
-    worker_id: usize,
     am_choked: bool,
 ) -> Result<usize, DownloadError> {
     if am_choked {
@@ -264,24 +186,16 @@ pub fn handle_piece(
 
     downloaded.append(&mut piece_msg.block.clone());
     let bytes_left = piece.get_length() - downloaded.len();
-    println!("BYTES LEFT {bytes_left} | WORKER {worker_id}");
 
     if bytes_left == 0 {
         let expected_hash = piece.get_hash();
         let obtained_hash = utils::sha1(&downloaded).map_err(DownloadError::Piece)?;
-        println!("EXPECTED HASH: {:x?}", expected_hash);
-        println!("OBTAINED HASH: {:x?}", obtained_hash);
 
         if expected_hash != obtained_hash {
-            println!("❌ NON-MATCHING HASHES ❌");
             return Err(DownloadError::Piece(
                 "downloaded bytes hash error".to_string(),
             ));
         }
-        println!(
-            "✅ MATCHING HASHES ✅\nFINISHED DOWNLOADING PIECE {}",
-            piece.get_index()
-        );
         return Ok(downloaded.len());
     }
 

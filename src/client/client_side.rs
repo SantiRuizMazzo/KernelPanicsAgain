@@ -1,6 +1,7 @@
-use crate::client::torrent::Torrent;
 use crate::config::Config;
+use crate::{client::torrent::Torrent, logger::torrent_logger::Message};
 use rand::Rng;
+use std::sync::mpsc::Sender;
 use std::{fs, ops::Deref, path::Path};
 #[derive(Clone)]
 pub struct ClientSide {
@@ -72,15 +73,15 @@ impl ClientSide {
         })
     }
 
-    pub fn init_client(&mut self) -> Result<(), String> {
-        self.run_client()
+    pub fn init_client(&mut self, logger_sender: Sender<Message>) -> Result<(), String> {
+        self.run_client(logger_sender)
     }
 
     /// Client run receive an address and something readadble.
-    fn run_client(&mut self) -> Result<(), String> {
+    fn run_client(&mut self, logger_sender: Sender<Message>) -> Result<(), String> {
         for (index, torrent) in self.torrents.iter_mut().enumerate() {
             torrent.set_index(index);
-            torrent.start_download(self.peer_id, index)?;
+            torrent.start_download(self.peer_id, index, logger_sender.clone())?;
         }
 
         Ok(())
@@ -165,11 +166,8 @@ mod tests {
             .contains(&Torrent::from("tests/sample.torrent")?));
         assert!(client
             .torrents
-            .contains(&Torrent::from("tests/ubuntu2204.torrent")?));
-        assert!(client
-            .torrents
-            .contains(&Torrent::from("tests/ultramarine.torrent")?));
-        assert_eq!(7, client.torrents.len());
+            .contains(&Torrent::from("tests/lubuntu.torrent")?));
+        assert_eq!(6, client.torrents.len());
         Ok(())
     }
 
