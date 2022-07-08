@@ -3,24 +3,25 @@ use crate::messages::message_type::{choke::Choke, have::Have, piece::Piece, unch
 use super::message_type::bitfield::Bitfield;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub enum TorrentMessage {
+pub enum PeerMessage {
     Bitfield(Bitfield),
     Have(Have),
     Unchoke(Unchoke),
     Piece(Piece),
     Choke(Choke),
 }
-pub fn parse(bytes_read: Vec<u8>) -> Result<TorrentMessage, String> {
+
+pub fn parse(bytes_read: Vec<u8>) -> Result<PeerMessage, String> {
     match bytes_read[0] {
-        0 => Ok(TorrentMessage::Choke(Choke::new())),
-        1 => Ok(TorrentMessage::Unchoke(Unchoke::new())),
+        0 => Ok(PeerMessage::Choke(Choke::new())),
+        1 => Ok(PeerMessage::Unchoke(Unchoke::new())),
         4 => parse_have(bytes_read),
         5 => parse_bitfield(bytes_read),
         7 => parse_piece(bytes_read),
         _ => Err("error while parsing message bytes read".to_string()),
     }
 }
-pub fn parse_piece(bytes: Vec<u8>) -> Result<TorrentMessage, String> {
+pub fn parse_piece(bytes: Vec<u8>) -> Result<PeerMessage, String> {
     if !is_piece_message(bytes.clone()) {
         return Err("received message is not a bitfield".to_string());
     }
@@ -36,10 +37,10 @@ pub fn parse_piece(bytes: Vec<u8>) -> Result<TorrentMessage, String> {
     );
     let block = Vec::from(&bytes[9..]);
 
-    Ok(TorrentMessage::Piece(Piece::new(index, begin, block)))
+    Ok(PeerMessage::Piece(Piece::new(index, begin, block)))
 }
 
-pub fn parse_have(bytes: Vec<u8>) -> Result<TorrentMessage, String> {
+pub fn parse_have(bytes: Vec<u8>) -> Result<PeerMessage, String> {
     if !is_have_message(bytes.clone()) {
         return Err("received message is not a have".to_string());
     }
@@ -48,15 +49,15 @@ pub fn parse_have(bytes: Vec<u8>) -> Result<TorrentMessage, String> {
             .try_into()
             .map_err(|_| "conversion error".to_string())?,
     );
-    Ok(TorrentMessage::Have(Have::new(piece_index)))
+    Ok(PeerMessage::Have(Have::new(piece_index)))
 }
 
-pub fn parse_bitfield(bytes: Vec<u8>) -> Result<TorrentMessage, String> {
+pub fn parse_bitfield(bytes: Vec<u8>) -> Result<PeerMessage, String> {
     if !is_bitfield_message(bytes.clone()) {
         return Err("received message is not a bitfield".to_string());
     }
     let bitfield = Vec::from(&bytes[1..]);
-    Ok(TorrentMessage::Bitfield(Bitfield::new(
+    Ok(PeerMessage::Bitfield(Bitfield::new(
         bitfield.len() as u32,
         bitfield,
     )))

@@ -5,7 +5,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use gtk::{prelude::*, ApplicationWindow, Builder};
-use patk_bittorrent_client::logger::torrent_logger::{Logger, Message};
+use patk_bittorrent_client::logger::torrent_logger::{LogMessage, Logger};
 use patk_bittorrent_client::utils;
 use patk_bittorrent_client::{client::client_side::ClientSide, config::Config};
 
@@ -137,13 +137,13 @@ fn build_ui(application: &gtk::Application, sender: mpsc::Sender<String>) -> App
 fn start_client_worker(
     receiver: mpsc::Receiver<String>,
     mut client: ClientSide,
-    sender: mpsc::Sender<Message>,
+    sender: mpsc::Sender<LogMessage>,
 ) {
     let _ = thread::spawn(move || loop {
         if let Ok(user_input) = receiver.recv() {
             let torrent_path = vec![user_input].into_iter();
             let _ = client.load_torrents(torrent_path);
-            let _ = client.init_client(sender.clone());
+            let _ = client.init(sender.clone());
         };
     });
 }
@@ -154,7 +154,7 @@ fn main() -> Result<(), String> {
 
     let config = Config::new()?;
     let client = ClientSide::new(config.clone())?;
-    let logger: Logger = Logger::new(config.log_path)?;
+    let logger: Logger = Logger::new(config)?;
 
     let log_peer_id = format!(
         "Client Peer ID: {}",
@@ -162,17 +162,17 @@ fn main() -> Result<(), String> {
     );
     let (sender, receiver) = mpsc::channel::<String>();
 
-    start_client_worker(receiver, client, logger.sender.clone());
+    start_client_worker(receiver, client, logger.get_sender());
 
     application.connect_activate(move |app| {
         let window = build_ui(app, sender.clone());
         window.show();
     });
 
-    let _ = match logger.sender.send(Message::Log(log_peer_id)) {
-        Err(error) => Err(error.to_string()),
-        Ok(_) => Ok(()),
-    };
+    logger
+        .get_sender()
+        .send(LogMessage::Log(log_peer_id))
+        .map_err(|err| err.to_string())?;
     let code = application.run();
     std::process::exit(code)
 }

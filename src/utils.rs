@@ -1,7 +1,6 @@
 use std::{
     fs::File,
     io::{Read, Write},
-    path::Path,
 };
 
 use sha1::{Digest, Sha1};
@@ -25,9 +24,16 @@ pub fn round_up(base: usize, multiple: usize) -> usize {
     ((base + (multiple - 1)) / multiple) * multiple
 }
 
+pub fn remove_extension(file_name: &str) -> String {
+    let mut split: Vec<&str> = file_name.split('.').collect();
+    if split.len() > 1 {
+        split.pop();
+    }
+    split.join("")
+}
+
 pub fn read_piece_file(download_path: String, piece_index: usize) -> Result<Vec<u8>, String> {
-    let path_str: String = download_path + &piece_index.to_string();
-    let path = Path::new(&path_str);
+    let path = format!("{download_path}/{piece_index}");
     let mut file = File::open(path).map_err(|err| err.to_string())?;
     let mut read_bytes = Vec::new();
     file.read_to_end(&mut read_bytes)

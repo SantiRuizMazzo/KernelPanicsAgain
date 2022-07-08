@@ -1,7 +1,7 @@
 use super::{download_info::DownloadInfo, peer::Peer};
 use crate::{
     client::{download::peer_protocol::DownloadError, torrent_piece::TorrentPiece},
-    logger::torrent_logger::Message,
+    logger::torrent_logger::LogMessage,
 };
 use std::{
     fs::{self, OpenOptions},
@@ -34,7 +34,7 @@ impl DownloadWorker {
         blacklist_mutex: Arc<Mutex<Vec<Peer>>>,
         downloaded_mutex: Arc<Mutex<Vec<TorrentPiece>>>,
         kill_tx: Sender<DownloadMessage>,
-        logger_sender: Sender<Message>,
+        logger_tx: Sender<LogMessage>,
     ) -> DownloadWorker {
         let thread = thread::spawn(move || {
             let mut peer = Peer::new(Some(download.get_id()), "".to_string(), 80, 0);
@@ -50,9 +50,12 @@ impl DownloadWorker {
                 drop(downloaded);
 
                 let progress = (current_pieces as f32 * 100_f32) / (total_pieces as f32);
-                let _ = logger_sender.send(Message::Log(format!(
-                    "DOWNLOADED PIECES: {progress:.2}% ({current_pieces}/{total_pieces})"
-                )));
+                logger_tx
+                    .send(LogMessage::Log(format!(
+                        "Downloaded pieces: {current_pieces}/{total_pieces} ({progress:.2}%)"
+                    )))
+                    .map_err(|err| err.to_string())?;
+
                 if current_pieces == total_pieces {
                     kill_tx
                         .send(DownloadMessage::Kill)
@@ -88,7 +91,7 @@ impl DownloadWorker {
                 }
 
                 (connection, piece) =
-                    match peer.download(target_piece, connection, total_pieces, download) {
+                    match peer.download(target_piece, connection, total_pieces, download.clone()) {
                         Ok((stream, piece)) => (Some(stream), piece),
                         Err(DownloadError::Connection(_)) => {
                             update_blacklist(&blacklist_mutex, &peer, &peer_tx)?;
@@ -112,11 +115,8 @@ impl DownloadWorker {
                 downloaded.push(target_piece);
                 drop(downloaded);
 
-                let string_path = format!(
-                    "downloads/tmp{}/{}",
-                    target_piece.get_torrent_index(),
-                    target_piece.get_index()
-                );
+                let string_path =
+                    format!("{}/.tmp/{}", download.get_path(), target_piece.get_index());
                 let download_file_path = Path::new(&string_path);
                 if let Some(p) = download_file_path.parent() {
                     fs::create_dir_all(p).map_err(|err| err.to_string())?

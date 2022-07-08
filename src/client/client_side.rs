@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::{client::torrent::Torrent, logger::torrent_logger::Message};
+use crate::{client::torrent::Torrent, logger::torrent_logger::LogMessage};
 use rand::Rng;
 use std::sync::mpsc::Sender;
 use std::{fs, ops::Deref, path::Path};
@@ -39,6 +39,7 @@ impl ClientSide {
                 self.load_from_file(path)?
             }
         }
+
         if self.torrents.is_empty() {
             return Err("could not load any .torrent files".to_string());
         }
@@ -73,17 +74,14 @@ impl ClientSide {
         })
     }
 
-    pub fn init_client(&mut self, logger_sender: Sender<Message>) -> Result<(), String> {
-        self.run_client(logger_sender)
-    }
-
-    /// Client run receive an address and something readadble.
-    fn run_client(&mut self, logger_sender: Sender<Message>) -> Result<(), String> {
-        for (index, torrent) in self.torrents.iter_mut().enumerate() {
-            torrent.set_index(index);
-            torrent.start_download(self.peer_id, index, logger_sender.clone())?;
+    pub fn init(&mut self, logger_tx: Sender<LogMessage>) -> Result<(), String> {
+        for torrent in self.torrents.iter_mut() {
+            torrent.start_download(
+                self.config.get_download_path(),
+                self.peer_id,
+                logger_tx.clone(),
+            )?;
         }
-
         Ok(())
     }
 }

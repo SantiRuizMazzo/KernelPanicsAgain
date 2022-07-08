@@ -4,24 +4,24 @@ use std::str::FromStr;
 
 #[derive(Clone)]
 pub struct Config {
-    pub tcp_port: i32,
-    pub download_path: String,
-    pub log_path: String,
+    tcp_port: u32,
+    download_path: String,
+    log_path: String,
 }
 
 impl Config {
     pub fn new() -> Result<Config, String> {
         let mut tcp_port = 8081;
-        let mut download_path = "downloads/".to_string();
+        let mut download_path = "downloads".to_string();
         let mut log_path = "log.txt".to_string();
 
         if let Ok(file) = OpenOptions::new().read(true).open("config.txt") {
             for line in BufReader::new(file).lines() {
                 let line = line.map_err(|err| err.to_string())?;
-
                 let value = Config::get_value(line.clone());
+
                 if line.contains("tcp_port") {
-                    tcp_port = i32::from_str(&value).map_err(|err| err.to_string())?;
+                    tcp_port = u32::from_str(&value).map_err(|err| err.to_string())?;
                 } else if line.contains("download_path") {
                     download_path = value;
                 } else if line.contains("log_path") {
@@ -29,11 +29,20 @@ impl Config {
                 }
             }
         };
+
         Ok(Config {
             tcp_port,
             download_path,
             log_path,
         })
+    }
+
+    pub fn get_download_path(&self) -> String {
+        self.download_path.clone()
+    }
+
+    pub fn get_log_path(&self) -> String {
+        self.log_path.clone()
     }
 
     fn get_value(line: String) -> String {

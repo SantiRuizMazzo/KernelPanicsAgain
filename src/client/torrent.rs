@@ -7,7 +7,7 @@ use crate::{
         tracker_decoding,
         tracker_info::{TrackerInfo, TrackerInfoState},
     },
-    logger::torrent_logger::Message,
+    logger::torrent_logger::LogMessage,
     urlencoding,
     utils::{append_to_file, read_piece_file},
 };
@@ -20,6 +20,8 @@ use std::{
     path::Path,
     sync::mpsc::Sender,
 };
+
+use super::download::download_info::DownloadInfo;
 
 const TOTAL_WORKERS: usize = 20;
 
@@ -50,41 +52,36 @@ impl ServerAddr {
 /// Stores the information that a .torrent file contains.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Torrent {
+    name: String,
     announce: String,
     piece_length: usize,
     pieces: Vec<TorrentPiece>,
     files: Vec<SingleFile>,
     info_hash: [u8; 20],
     tracker_info: TrackerInfoState,
-    index: usize,
 }
 
 impl Torrent {
     /// Builds a new `Torrent` instance with the given parameters.
     pub fn new(
+        name: String,
         announce: String,
         piece_length: usize,
         pieces: Vec<TorrentPiece>,
         files: Vec<SingleFile>,
         info_hash: [u8; 20],
-        index: usize,
     ) -> Torrent {
         Torrent {
+            name,
             announce,
             piece_length,
             pieces,
             files,
             info_hash,
             tracker_info: TrackerInfoState::Unset,
-            index,
         }
     }
-    pub fn set_index(&mut self, index: usize) {
-        self.index = index;
-        for piece in self.pieces.iter_mut() {
-            piece.set_torrent_index(index);
-        }
-    }
+
     /// Attempts to decode a .torrent file located at `path`, and build a `Torrent` struct with its data (if possible).
     pub fn from<P>(path: P) -> Result<Torrent, String>
     where
@@ -210,9 +207,9 @@ impl Torrent {
     /// Starts torrent download by requesting tracker info and connecting to peers
     pub fn start_download(
         &mut self,
+        download_path: String,
         client_id: [u8; 20],
-        torrent_index: usize,
-        logger_sender: Sender<Message>,
+        logger_tx: Sender<LogMessage>,
     ) -> Result<(), String> {
         self.tracker_info = TrackerInfoState::Set(self.get_tracker_info(client_id, 6881)?);
         let peers = self
@@ -220,41 +217,31 @@ impl Torrent {
             .get_peers()
             .ok_or_else(|| "no peer list loaded".to_string())?;
 
-        let pool = DownloadPool::new(
-            TOTAL_WORKERS,
-            &self.pieces,
-            &peers,
-            client_id,
-            self.info_hash,
-            logger_sender,
-        )?;
-        drop(pool);
-        self.create_downloaded_files(torrent_index)?;
+        let download_path = format!("{download_path}/{}", self.name);
+        let download = DownloadInfo::new(client_id, self.info_hash, download_path.clone());
 
+        let pool = DownloadPool::new(TOTAL_WORKERS, &self.pieces, &peers, logger_tx, download)?;
+        drop(pool);
+        self.create_downloaded_files(download_path)?;
         Ok(())
     }
 
-    pub fn create_downloaded_files(&self, torrent_index: usize) -> Result<(), String> {
+    fn create_downloaded_files(&self, download_path: String) -> Result<(), String> {
         let mut current_piece_index = 0_usize;
         let mut piece_offset = 0;
 
         for file in &self.files {
             let mut opened_file = OpenOptions::new()
                 .create(true)
-                .write(true)
                 .append(true)
-                .open(format!(
-                    "downloads/tmp{}/{}",
-                    torrent_index,
-                    file.path.clone()
-                ))
+                .open(format!("{download_path}/{}", &file.path))
                 .map_err(|err| err.to_string())?;
 
             let mut saved_file_length = 0_usize;
             let file_length = file.length as usize;
 
             while saved_file_length < file_length {
-                let str_path = format!("downloads/tmp{}/", torrent_index);
+                let str_path = format!("{download_path}/.tmp");
                 let read_bytes = read_piece_file(str_path, current_piece_index)?;
                 let missing_bytes = file_length - saved_file_length;
 

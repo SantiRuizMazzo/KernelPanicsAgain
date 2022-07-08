@@ -4,7 +4,7 @@ use crate::{
         read_id_and_payload, read_len,
     },
     messages::{
-        message_parser::{self, TorrentMessage},
+        message_parser::{self, PeerMessage},
         message_type::request::Request,
     },
 };
@@ -97,7 +97,7 @@ impl Peer {
             let message = message_parser::parse(bytes_read).map_err(DownloadError::Piece)?;
 
             match message {
-                TorrentMessage::Bitfield(msg) => {
+                PeerMessage::Bitfield(msg) => {
                     self.bitfield = handle_bitfield(
                         &mut stream,
                         msg.get_bits(),
@@ -105,21 +105,21 @@ impl Peer {
                         &mut self.am_interested,
                     )?;
                 }
-                TorrentMessage::Have(msg) => handle_have(
+                PeerMessage::Have(msg) => handle_have(
                     &mut stream,
                     msg,
                     &mut self.bitfield,
                     &mut self.am_interested,
                     piece.get_index(),
                 )?,
-                TorrentMessage::Unchoke(_) => handle_unchoke(
+                PeerMessage::Unchoke(_) => handle_unchoke(
                     &mut stream,
                     &mut cur_request,
                     &mut self.am_choked,
                     self.am_interested,
                 )?,
-                TorrentMessage::Choke(_) => handle_choke(&mut cur_request, &mut self.am_choked),
-                TorrentMessage::Piece(msg) => {
+                PeerMessage::Choke(_) => handle_choke(&mut cur_request, &mut self.am_choked),
+                PeerMessage::Piece(msg) => {
                     let bytes_downloaded = handle_piece(
                         &mut stream,
                         msg,

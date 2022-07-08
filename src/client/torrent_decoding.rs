@@ -30,18 +30,18 @@ pub fn torrent_from_bytes(bytes: Vec<u8>) -> Result<Torrent, String> {
     };
 
     let files = match (info.get("length"), info.get("files")) {
-        (Some(BType::Integer(length)), None) => single_file_list(name, *length),
-        (None, Some(BType::List(list))) => multiple_file_list(name, list)?,
+        (Some(BType::Integer(length)), None) => single_file_list(name.clone(), *length),
+        (None, Some(BType::List(list))) => multiple_file_list(name.clone(), list)?,
         _ => return Err("length and files keys not present or have invalid types".to_string()),
     };
 
     Ok(Torrent::new(
+        utils::remove_extension(&name),
         announce,
         piece_length,
         pieces,
         files,
         get_info_hash(bytes)?,
-        0,
     ))
 }
 
@@ -162,6 +162,7 @@ mod tests {
         let file_bytes = fs::read("tests/sample.torrent").map_err(|err| err.to_string())?;
 
         let expected_torrent = Torrent::new(
+            "sample".to_string(),
             "udp://tracker.openbittorrent.com:80".to_string(),
             65536,
             torrent_pieces_list(&file_bytes[148..168].to_vec(), 65536)?,
@@ -170,7 +171,6 @@ mod tests {
                 0xd0, 0xd1, 0x4c, 0x92, 0x6e, 0x6e, 0x99, 0x76, 0x1a, 0x2f, 0xdc, 0xff, 0x27, 0xb4,
                 0x03, 0xd9, 0x63, 0x76, 0xef, 0xf6,
             ],
-            0,
         );
 
         let torrent = torrent_from_bytes(file_bytes)?;
@@ -183,6 +183,7 @@ mod tests {
         let file_bytes = fs::read("tests/bla.torrent").map_err(|err| err.to_string())?;
 
         let expected_torrent = Torrent::new(
+            "bla".to_string(),
             "udp://tracker.opentrackr.org:1337/announce".to_string(),
             16384,
             torrent_pieces_list(&file_bytes[392..412].to_vec(), 16384)?,
@@ -196,7 +197,6 @@ mod tests {
                 0x89, 0xae, 0x9d, 0x0b, 0xe3, 0x7b, 0xed, 0xbc, 0x97, 0x66, 0xee, 0x85, 0x11, 0x91,
                 0x16, 0xe9, 0x4f, 0x40, 0xc8, 0xe5,
             ],
-            0,
         );
 
         let torrent = torrent_from_bytes(file_bytes)?;
