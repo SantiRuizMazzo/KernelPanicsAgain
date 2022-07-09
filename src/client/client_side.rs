@@ -1,16 +1,38 @@
 use crate::config::Config;
 use crate::{client::torrent::Torrent, logger::torrent_logger::LogMessage};
 use rand::Rng;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 use std::{fs, ops::Deref, path::Path};
+
+use super::download::download_pool::DownloadPool;
+
+pub type TorrentSender = Sender<Torrent>;
+pub type TorrentReceiver = Arc<Mutex<Receiver<Torrent>>>;
+pub type DownloadedTorrents = Arc<Mutex<Vec<Torrent>>>;
+
 #[derive(Clone)]
 pub struct ClientSide {
     pub peer_id: [u8; 20],
     pub config: Config,
-    torrents: Vec<Torrent>,
+    torrent_queue: (TorrentSender, TorrentReceiver),
+    downloaded_torrents: DownloadedTorrents,
 }
 
 impl ClientSide {
+    pub fn new(config: Config) -> Result<ClientSide, String> {
+        let (torrent_tx, torrent_rx) = mpsc::channel::<Torrent>();
+        let torrent_queue = (torrent_tx, Arc::new(Mutex::new(torrent_rx)));
+        let downloaded_torrents = Arc::new(Mutex::new(Vec::<Torrent>::new()));
+
+        Ok(ClientSide {
+            peer_id: ClientSide::generate_peer_id()?,
+            config,
+            torrent_queue,
+            downloaded_torrents,
+        })
+    }
+
     fn generate_peer_id() -> Result<[u8; 20], String> {
         let mut peer_id = b"-PK0001-".to_vec();
         let mut generator = rand::thread_rng();
@@ -39,10 +61,6 @@ impl ClientSide {
                 self.load_from_file(path)?
             }
         }
-
-        if self.torrents.is_empty() {
-            return Err("could not load any .torrent files".to_string());
-        }
         Ok(())
     }
 
@@ -60,28 +78,24 @@ impl ClientSide {
     {
         if let Some(extension) = file.extension() {
             if extension == "torrent" {
-                self.torrents.push(Torrent::from(file)?)
+                self.torrent_queue
+                    .0
+                    .send(Torrent::from(file)?)
+                    .map_err(|err| err.to_string())?
             }
         }
         Ok(())
     }
 
-    pub fn new(config: Config) -> Result<ClientSide, String> {
-        Ok(ClientSide {
-            peer_id: ClientSide::generate_peer_id()?,
-            config,
-            torrents: Vec::new(),
-        })
-    }
-
     pub fn init(&mut self, logger_tx: Sender<LogMessage>) -> Result<(), String> {
-        for torrent in self.torrents.iter_mut() {
-            torrent.start_download(
-                self.config.get_download_path(),
-                self.peer_id,
-                logger_tx.clone(),
-            )?;
-        }
+        let pool = DownloadPool::new(
+            self.torrent_queue.clone(),
+            self.downloaded_torrents.clone(),
+            logger_tx,
+            self.peer_id,
+            &self.config,
+        );
+        pool.ids();
         Ok(())
     }
 }
@@ -116,10 +130,10 @@ mod tests {
         let mut client = ClientSide::new(Config::new()?)?;
         let command_line_args = vec!["tests/debian.torrent".to_string()].into_iter();
         client.load_torrents(command_line_args)?;
-        assert_eq!(
+        /*assert_eq!(
             vec![Torrent::from("tests/debian.torrent")?],
             client.torrents
-        );
+        );*/
         Ok(())
     }
 
@@ -133,12 +147,12 @@ mod tests {
         ]
         .into_iter();
         client.load_torrents(command_line_args)?;
-        let expected_torrents = vec![
+        /*let expected_torrents = vec![
             Torrent::from("tests/debian.torrent")?,
             Torrent::from("tests/fedora.torrent")?,
             Torrent::from("tests/linuxmint.torrent")?,
         ];
-        assert_eq!(expected_torrents, client.torrents);
+        assert_eq!(expected_torrents, client.torrents);*/
         Ok(())
     }
 
@@ -147,7 +161,7 @@ mod tests {
         let mut client = ClientSide::new(Config::new()?)?;
         let command_line_args = vec!["tests".to_string()].into_iter();
         client.load_torrents(command_line_args)?;
-        assert!(client
+        /*assert!(client
             .torrents
             .contains(&Torrent::from("tests/bla.torrent")?));
         assert!(client
@@ -165,7 +179,7 @@ mod tests {
         assert!(client
             .torrents
             .contains(&Torrent::from("tests/lubuntu.torrent")?));
-        assert_eq!(6, client.torrents.len());
+        assert_eq!(6, client.torrents.len());*/
         Ok(())
     }
 

@@ -134,16 +134,11 @@ fn build_ui(application: &gtk::Application, sender: mpsc::Sender<String>) -> App
 
 //cargo run --package patk_bittorrent_client --bin ui_test --all-features
 
-fn start_client_worker(
-    receiver: mpsc::Receiver<String>,
-    mut client: ClientSide,
-    sender: mpsc::Sender<LogMessage>,
-) {
+fn start_client_worker(receiver: mpsc::Receiver<String>, mut client: ClientSide) {
     let _ = thread::spawn(move || loop {
         if let Ok(user_input) = receiver.recv() {
             let torrent_path = vec![user_input].into_iter();
             let _ = client.load_torrents(torrent_path);
-            let _ = client.init(sender.clone());
         };
     });
 }
@@ -153,8 +148,9 @@ fn main() -> Result<(), String> {
         gtk::Application::new(Some("com.Panick_at_the_kernel.ui"), Default::default());
 
     let config = Config::new()?;
-    let client = ClientSide::new(config.clone())?;
-    let logger: Logger = Logger::new(config)?;
+    let logger = Logger::new(config.clone())?;
+    let mut client = ClientSide::new(config)?;
+    client.init(logger.get_sender())?;
 
     let log_peer_id = format!(
         "Client Peer ID: {}",
@@ -162,7 +158,7 @@ fn main() -> Result<(), String> {
     );
     let (sender, receiver) = mpsc::channel::<String>();
 
-    start_client_worker(receiver, client, logger.get_sender());
+    start_client_worker(receiver, client);
 
     application.connect_activate(move |app| {
         let window = build_ui(app, sender.clone());

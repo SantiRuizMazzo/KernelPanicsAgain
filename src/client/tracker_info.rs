@@ -7,10 +7,10 @@ pub enum TrackerInfoState {
 }
 
 impl TrackerInfoState {
-    pub fn get_peers(&self) -> Option<Vec<Peer>> {
+    pub fn is_set(&self) -> bool {
         match self {
-            Self::Set(tracker_info) => Some(tracker_info.get_peers()),
-            Self::Unset => None,
+            Self::Set(_) => true,
+            Self::Unset => false,
         }
     }
 }

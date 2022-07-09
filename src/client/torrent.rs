@@ -1,13 +1,11 @@
 use crate::{
     client::{
-        download::download_pool::DownloadPool,
         single_file::SingleFile,
         torrent_decoding,
         torrent_piece::TorrentPiece,
         tracker_decoding,
         tracker_info::{TrackerInfo, TrackerInfoState},
     },
-    logger::torrent_logger::LogMessage,
     urlencoding,
     utils::{append_to_file, read_piece_file},
 };
@@ -18,12 +16,18 @@ use std::{
     io::{Read, Write},
     net::TcpStream,
     path::Path,
-    sync::mpsc::Sender,
+    sync::{
+        mpsc::{self},
+        Arc, Mutex,
+    },
 };
 
-use super::download::download_info::DownloadInfo;
-
-const TOTAL_WORKERS: usize = 20;
+use super::download::{
+    download_pool::{
+        self, DownloadedPieces, PeerBlacklist, PeerReceiver, PeerSender, PieceReceiver, PieceSender,
+    },
+    peer::Peer,
+};
 
 /// Represents a web server complete address.
 #[derive(Debug)]
@@ -50,15 +54,19 @@ impl ServerAddr {
 }
 
 /// Stores the information that a .torrent file contains.
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Torrent {
     name: String,
     announce: String,
-    piece_length: usize,
-    pieces: Vec<TorrentPiece>,
+    //piece_length: usize,
+    //pieces: Vec<TorrentPiece>,
     files: Vec<SingleFile>,
     info_hash: [u8; 20],
     tracker_info: TrackerInfoState,
+    pieces_handle: (PieceSender, PieceReceiver),
+    peers_handle: (PeerSender, PeerReceiver),
+    downloaded: DownloadedPieces,
+    blacklist: PeerBlacklist,
 }
 
 impl Torrent {
@@ -66,20 +74,30 @@ impl Torrent {
     pub fn new(
         name: String,
         announce: String,
-        piece_length: usize,
+        //piece_length: usize,
         pieces: Vec<TorrentPiece>,
         files: Vec<SingleFile>,
         info_hash: [u8; 20],
-    ) -> Torrent {
-        Torrent {
+    ) -> Result<Torrent, String> {
+        let pieces_handle = download_pool::setup_pieces_queue(&pieces)?;
+        let (peer_tx, peer_rx) = mpsc::channel::<Peer>();
+        let peers_handle = (peer_tx, Arc::new(Mutex::new(peer_rx)));
+        let downloaded = Arc::new(Mutex::new(Vec::<TorrentPiece>::with_capacity(pieces.len())));
+        let blacklist = Arc::new(Mutex::new(Vec::<Peer>::new()));
+
+        Ok(Torrent {
             name,
             announce,
-            piece_length,
-            pieces,
+            //piece_length,
+            //pieces,
             files,
             info_hash,
             tracker_info: TrackerInfoState::Unset,
-        }
+            pieces_handle,
+            peers_handle,
+            downloaded,
+            blacklist,
+        })
     }
 
     /// Attempts to decode a .torrent file located at `path`, and build a `Torrent` struct with its data (if possible).
@@ -205,28 +223,25 @@ impl Torrent {
     }
 
     /// Starts torrent download by requesting tracker info and connecting to peers
-    pub fn start_download(
-        &mut self,
-        download_path: String,
-        client_id: [u8; 20],
-        logger_tx: Sender<LogMessage>,
-    ) -> Result<(), String> {
-        self.tracker_info = TrackerInfoState::Set(self.get_tracker_info(client_id, 6881)?);
-        let peers = self
-            .tracker_info
-            .get_peers()
-            .ok_or_else(|| "no peer list loaded".to_string())?;
+    pub fn start_download(&mut self, client_id: [u8; 20]) -> Result<(), String> {
+        if self.tracker_info.is_set() {
+            return Ok(());
+        }
 
-        let download_path = format!("{download_path}/{}", self.name);
-        let download = DownloadInfo::new(client_id, self.info_hash, download_path.clone());
+        let tracker_info = self.get_tracker_info(client_id, 6881)?;
 
-        let pool = DownloadPool::new(TOTAL_WORKERS, &self.pieces, &peers, logger_tx, download)?;
-        drop(pool);
-        self.create_downloaded_files(download_path)?;
+        for peer in tracker_info.get_peers() {
+            self.peers_handle
+                .0
+                .send(peer.clone())
+                .map_err(|err| err.to_string())?;
+        }
+
+        self.tracker_info = TrackerInfoState::Set(tracker_info);
         Ok(())
     }
 
-    fn create_downloaded_files(&self, download_path: String) -> Result<(), String> {
+    pub fn create_downloaded_files(&self, download_path: String) -> Result<(), String> {
         let mut current_piece_index = 0_usize;
         let mut piece_offset = 0;
 
@@ -264,6 +279,30 @@ impl Torrent {
             }
         }
         Ok(())
+    }
+
+    pub fn get_name(&self) -> String {
+        self.name.clone()
+    }
+
+    pub fn get_hash(&self) -> [u8; 20] {
+        self.info_hash
+    }
+
+    pub fn get_downloaded(&self) -> DownloadedPieces {
+        self.downloaded.clone()
+    }
+
+    pub fn get_pieces_handle(&self) -> (PieceSender, PieceReceiver) {
+        self.pieces_handle.clone()
+    }
+
+    pub fn get_peers_handle(&self) -> (PeerSender, PeerReceiver) {
+        self.peers_handle.clone()
+    }
+
+    pub fn get_blacklist(&self) -> PeerBlacklist {
+        self.blacklist.clone()
     }
 }
 
