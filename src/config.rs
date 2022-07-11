@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 #[derive(Clone)]
 pub struct Config {
-    //tcp_port: usize,
+    tcp_port: usize,
     download_path: String,
     log_path: String,
     max_download_connections: usize,
@@ -13,7 +13,7 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Result<Config, String> {
-        //let mut tcp_port = 8081;
+        let mut tcp_port = 8081;
         let mut download_path = "downloads".to_string();
         let mut log_path = "log.txt".to_string();
         let mut max_download_connections = 20;
@@ -24,10 +24,9 @@ impl Config {
                 let line = line.map_err(|err| err.to_string())?;
                 let value = Config::get_value(line.clone());
 
-                /*if line.contains("tcp_port") {
+                if line.contains("tcp_port") {
                     tcp_port = usize::from_str(&value).map_err(|err| err.to_string())?;
-                } else */
-                if line.contains("download_path") {
+                } else if line.contains("download_path") {
                     download_path = value;
                 } else if line.contains("log_path") {
                     log_path = value;
@@ -41,7 +40,7 @@ impl Config {
         };
 
         Ok(Config {
-            //tcp_port,
+            tcp_port,
             download_path,
             log_path,
             max_download_connections,
@@ -69,6 +68,10 @@ impl Config {
         let line: Vec<&str> = line.rsplit('=').collect();
         line[0].to_string()
     }
+
+    pub fn get_server_address(&self) -> String {
+        format!("localhost:{}", self.tcp_port)
+    }
 }
 
 #[cfg(test)]
@@ -78,7 +81,7 @@ mod tests {
     #[test]
     fn generate_correctly_configuration() -> Result<(), String> {
         let config = Config::new()?;
-        //assert_eq!(8081, config.tcp_port);
+        assert_eq!(8081, config.tcp_port);
         assert_eq!("downloads/", config.download_path);
         assert_eq!("log.txt", config.log_path);
         Ok(())

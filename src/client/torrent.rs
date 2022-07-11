@@ -58,8 +58,7 @@ impl ServerAddr {
 pub struct Torrent {
     name: String,
     announce: String,
-    //piece_length: usize,
-    //pieces: Vec<TorrentPiece>,
+    total_pieces: usize,
     files: Vec<SingleFile>,
     info_hash: [u8; 20],
     tracker_info: TrackerInfoState,
@@ -74,7 +73,6 @@ impl Torrent {
     pub fn new(
         name: String,
         announce: String,
-        //piece_length: usize,
         pieces: Vec<TorrentPiece>,
         files: Vec<SingleFile>,
         info_hash: [u8; 20],
@@ -88,8 +86,7 @@ impl Torrent {
         Ok(Torrent {
             name,
             announce,
-            //piece_length,
-            //pieces,
+            total_pieces: pieces.len(),
             files,
             info_hash,
             tracker_info: TrackerInfoState::Unset,
@@ -229,6 +226,7 @@ impl Torrent {
         }
 
         let tracker_info = self.get_tracker_info(client_id, 6881)?;
+        //let tracker_info = TrackerInfo::new(0,vec![Peer::new(Some(client_id), "localhost".to_string(), 8081, 0)]);
 
         for peer in tracker_info.get_peers() {
             self.peers_handle
@@ -303,6 +301,10 @@ impl Torrent {
 
     pub fn get_blacklist(&self) -> PeerBlacklist {
         self.blacklist.clone()
+    }
+
+    pub fn get_total_pieces(&self) -> usize {
+        self.total_pieces
     }
 }
 

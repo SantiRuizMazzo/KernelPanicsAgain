@@ -3,12 +3,11 @@ use super::{
     peer::Peer,
 };
 use crate::{
-    client::{
-        client_side::{DownloadedTorrents, TorrentReceiver, TorrentSender},
-        torrent_piece::TorrentPiece,
-    },
+    client::client_side::{DownloadedTorrents, TorrentReceiver, TorrentSender},
+    client::torrent_piece::TorrentPiece,
     config::Config,
     logger::torrent_logger::LogMessage,
+    utils::ServerNotification,
 };
 use std::sync::{
     mpsc::{self, Receiver, Sender},
@@ -33,6 +32,7 @@ impl DownloadPool {
         logger_tx: Sender<LogMessage>,
         client_id: [u8; 20],
         config: &Config,
+        notification_tx: Sender<ServerNotification>,
     ) -> DownloadPool {
         let mut workers = Vec::with_capacity(config.get_max_download_connections());
 
@@ -43,6 +43,7 @@ impl DownloadPool {
             logger_tx.clone(),
             client_id,
             config,
+            notification_tx.clone(),
         )
         .get_thread();
 
@@ -54,6 +55,7 @@ impl DownloadPool {
                 logger_tx.clone(),
                 client_id,
                 config,
+                notification_tx.clone(),
             ));
         }
 

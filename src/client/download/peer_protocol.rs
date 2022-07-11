@@ -1,8 +1,9 @@
-use super::download_info::DownloadInfo;
+use super::{download_info::DownloadInfo, download_pool::DownloadedPieces};
 use crate::{
     client::torrent_piece::TorrentPiece,
     messages::message_type::{
-        handshake::HandShake, have::Have, interested::Interested, piece::Piece, request::Request,
+        bitfield::Bitfield, handshake::HandShake, have::Have, interested::Interested, piece::Piece,
+        request::Request,
     },
     utils,
 };
@@ -11,7 +12,7 @@ use std::{cmp, io::Read, net::TcpStream};
 
 pub const BLOCK_SIZE: usize = 16384;
 
-pub enum DownloadError {
+pub enum ProtocolError {
     Connection(String),
     Piece(String),
 }
@@ -33,7 +34,7 @@ fn handle_hs_sending(stream: &mut TcpStream, download: DownloadInfo) -> Result<(
     Ok(())
 }
 
-fn handle_hs_receiving(stream: &mut TcpStream) -> Result<(), String> {
+pub fn handle_hs_receiving(stream: &mut TcpStream) -> Result<HandShake, String> {
     let mut pstrlen = [0];
     let mut read = stream.read(&mut pstrlen).map_err(|err| err.to_string())?;
     if read != 1 {
@@ -64,28 +65,28 @@ fn handle_hs_receiving(stream: &mut TcpStream) -> Result<(), String> {
         .try_into()
         .map_err(|_| "conversion error".to_string())?;
 
-    let _ = HandShake::new(pstr, reserved, info_hash, read_peer_id);
-    Ok(())
+    let received_handshake = HandShake::new(pstr, reserved, info_hash, read_peer_id);
+    Ok(received_handshake)
 }
 
-pub fn read_len(stream: &mut TcpStream) -> Result<u32, DownloadError> {
+pub fn read_len(stream: &mut TcpStream) -> Result<u32, ProtocolError> {
     let mut len = [0; 4];
     let read = stream
         .read(&mut len)
-        .map_err(|err| DownloadError::Connection(err.to_string()))?;
+        .map_err(|err| ProtocolError::Connection(err.to_string()))?;
     if read == 0 {
-        return Err(DownloadError::Connection(
+        return Err(ProtocolError::Connection(
             "connection closed by remote peer".to_string(),
         ));
     }
     Ok(u32::from_be_bytes(len))
 }
 
-pub fn read_id_and_payload(stream: &mut TcpStream, len: u32) -> Result<Vec<u8>, DownloadError> {
+pub fn read_id_and_payload(stream: &mut TcpStream, len: u32) -> Result<Vec<u8>, ProtocolError> {
     let mut bytes_read = vec![0; len as usize];
     stream
         .read_exact(&mut bytes_read)
-        .map_err(|err| DownloadError::Connection(err.to_string()))?;
+        .map_err(|err| ProtocolError::Connection(err.to_string()))?;
     Ok(bytes_read)
 }
 
@@ -94,9 +95,9 @@ pub fn handle_bitfield(
     bitfield: Vec<u8>,
     piece_index: usize,
     am_interested: &mut bool,
-) -> Result<Vec<u8>, DownloadError> {
+) -> Result<Vec<u8>, ProtocolError> {
     if !bitfield_contains(&bitfield, piece_index) {
-        return Err(DownloadError::Piece(
+        return Err(ProtocolError::Piece(
             "current remote peer does not serves this piece".to_string(),
         ));
     }
@@ -104,7 +105,7 @@ pub fn handle_bitfield(
     *am_interested = true;
     Interested::new()
         .send(stream)
-        .map_err(|err| DownloadError::Piece(err.to_string()))?;
+        .map_err(|err| ProtocolError::Piece(err.to_string()))?;
     Ok(bitfield)
 }
 
@@ -119,16 +120,24 @@ pub fn handle_have(
     have_msg: Have,
     bitfield: &mut Vec<u8>,
     am_interested: &mut bool,
-    piece_index: usize,
-) -> Result<(), DownloadError> {
+    downloaded_mutex: DownloadedPieces,
+) -> Result<(), ProtocolError> {
     let new_piece_index = have_msg.get_index() as usize;
     bitfield[new_piece_index / 8] |= piece_bit_mask(new_piece_index);
 
-    if !*am_interested && bitfield_contains(bitfield, piece_index) {
+    let downloaded = downloaded_mutex
+        .lock()
+        .map_err(|err| ProtocolError::Piece(err.to_string()))?;
+
+    let already_downloaded = downloaded
+        .iter()
+        .any(|piece| piece.get_index() == new_piece_index);
+
+    if !(already_downloaded || *am_interested) {
         *am_interested = true;
         Interested::new()
             .send(stream)
-            .map_err(|err| DownloadError::Piece(err.to_string()))?;
+            .map_err(|err| ProtocolError::Piece(err.to_string()))?;
     }
     Ok(())
 }
@@ -147,12 +156,12 @@ pub fn handle_unchoke(
     cur_request: &mut Request,
     am_choked: &mut bool,
     am_interested: bool,
-) -> Result<(), DownloadError> {
+) -> Result<(), ProtocolError> {
     *am_choked = false;
     if am_interested {
         cur_request
             .send(stream)
-            .map_err(|err| DownloadError::Piece(err.to_string()))?;
+            .map_err(|err| ProtocolError::Piece(err.to_string()))?;
     }
     Ok(())
 }
@@ -164,7 +173,7 @@ pub fn handle_piece(
     piece: TorrentPiece,
     cur_request: &mut Request,
     am_choked: bool,
-) -> Result<usize, DownloadError> {
+) -> Result<usize, ProtocolError> {
     if am_choked {
         return Ok(downloaded.len());
     }
@@ -175,7 +184,7 @@ pub fn handle_piece(
     {
         cur_request
             .send(stream)
-            .map_err(|err| DownloadError::Piece(err.to_string()))?;
+            .map_err(|err| ProtocolError::Piece(err.to_string()))?;
         return Ok(downloaded.len());
     }
 
@@ -184,10 +193,10 @@ pub fn handle_piece(
 
     if bytes_left == 0 {
         let expected_hash = piece.get_hash();
-        let obtained_hash = utils::sha1(&downloaded).map_err(DownloadError::Piece)?;
+        let obtained_hash = utils::sha1(&downloaded).map_err(ProtocolError::Piece)?;
 
         if expected_hash != obtained_hash {
-            return Err(DownloadError::Piece(
+            return Err(ProtocolError::Piece(
                 "downloaded bytes hash error".to_string(),
             ));
         }
@@ -202,11 +211,27 @@ pub fn handle_piece(
     );
     cur_request
         .send(stream)
-        .map_err(|err| DownloadError::Piece(err.to_string()))?;
+        .map_err(|err| ProtocolError::Piece(err.to_string()))?;
     Ok(downloaded.len())
 }
 
 pub fn handle_choke(cur_request: &mut Request, am_choked: &mut bool) {
     *am_choked = true;
     cur_request.discarded()
+}
+
+pub fn handle_request(
+    stream: &mut TcpStream,
+    request: Request,
+    torrent_path: String,
+    bitfield: &Bitfield,
+) -> Result<(), String> {
+    if !bitfield.contains(request.get_index() as usize) {
+        return Ok(()); // Ok to ignore missing piece
+    }
+
+    let mut piece_to_send = request.generate_empty_piece();
+    piece_to_send.load_block(torrent_path).map_err(|err| err)?;
+    piece_to_send.send(stream).map_err(|err| err.to_string())?;
+    Ok(())
 }

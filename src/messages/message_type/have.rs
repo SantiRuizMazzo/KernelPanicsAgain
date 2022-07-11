@@ -1,3 +1,6 @@
+use std::io::Write;
+use std::net::TcpStream;
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Have {
     // 4 byte
@@ -20,15 +23,24 @@ impl Have {
     pub fn get_index(&self) -> u32 {
         self.index
     }
+    /*
+        pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+            stream.write_all(&[0])?;
+            stream.write_all(&[0])?;
+            stream.write_all(&[0])?;
+            stream.write_all(self.len)?;
+            stream.write_all(&[self.id])?;
+            stream.write_all(self.index)?;
 
-    /*pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-         stream.write_all(&[0])?;
-          stream.write_all(&[0])?;
-          stream.write_all(&[0])?;
-          stream.write_all(&[self.len])?;
-          stream.write_all(&[self.id])?;
-          stream.write_all(&self.index)?;
+            Ok(())
+        }
+    */
+
+    pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
+        stream.write_all(&u32::to_be_bytes(self.len))?;
+        stream.write_all(&[self.id])?;
+        stream.write_all(&u32::to_be_bytes(self.index))?;
 
         Ok(())
-    }*/
+    }
 }

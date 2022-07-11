@@ -1,6 +1,8 @@
 use std::io::Write;
 use std::net::TcpStream;
 
+use super::piece::Piece;
+
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Request {
     len: u32,
@@ -40,7 +42,15 @@ impl Request {
         Ok(())
     }
 
+    pub fn generate_empty_piece(&self) -> Piece {
+        Piece::new(self.index, self.begin, vec![0; self.length as usize])
+    }
+
     pub fn discarded(&mut self) {
         self.sent = false
+    }
+
+    pub fn get_index(&self) -> u32 {
+        self.index
     }
 }

@@ -1,3 +1,7 @@
+use std::sync::mpsc::Sender;
+
+use crate::{server::upload::torrent_upload_info::TorrentUploadInfo, utils::ServerNotification};
+
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct TorrentPiece {
     index: usize,
@@ -24,5 +28,15 @@ impl TorrentPiece {
 
     pub fn get_hash(&self) -> [u8; 20] {
         self.hash
+    }
+
+    pub fn notify_present(
+        &self,
+        notification_sender: Sender<ServerNotification>,
+        upload_info: TorrentUploadInfo,
+    ) -> Result<(), String> {
+        notification_sender
+            .send(ServerNotification::HavePiece(*self, upload_info))
+            .map_err(|err| err.to_string())
     }
 }

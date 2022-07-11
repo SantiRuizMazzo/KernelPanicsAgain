@@ -1,5 +1,7 @@
 use crate::config::Config;
-use crate::{client::torrent::Torrent, logger::torrent_logger::LogMessage};
+use crate::{
+    client::torrent::Torrent, logger::torrent_logger::LogMessage, utils::ServerNotification,
+};
 use rand::Rng;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -15,12 +17,16 @@ pub type DownloadedTorrents = Arc<Mutex<Vec<Torrent>>>;
 pub struct ClientSide {
     pub peer_id: [u8; 20],
     pub config: Config,
+    notification_tx: Sender<ServerNotification>,
     torrent_queue: (TorrentSender, TorrentReceiver),
     downloaded_torrents: DownloadedTorrents,
 }
 
 impl ClientSide {
-    pub fn new(config: Config) -> Result<ClientSide, String> {
+    pub fn new(
+        config: Config,
+        notification_tx: Sender<ServerNotification>,
+    ) -> Result<ClientSide, String> {
         let (torrent_tx, torrent_rx) = mpsc::channel::<Torrent>();
         let torrent_queue = (torrent_tx, Arc::new(Mutex::new(torrent_rx)));
         let downloaded_torrents = Arc::new(Mutex::new(Vec::<Torrent>::new()));
@@ -28,6 +34,7 @@ impl ClientSide {
         Ok(ClientSide {
             peer_id: ClientSide::generate_peer_id()?,
             config,
+            notification_tx,
             torrent_queue,
             downloaded_torrents,
         })
@@ -94,6 +101,7 @@ impl ClientSide {
             logger_tx,
             self.peer_id,
             &self.config,
+            self.notification_tx.clone(),
         );
         pool.ids();
         Ok(())
@@ -102,6 +110,8 @@ impl ClientSide {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc;
+
     use super::*;
 
     #[test]
@@ -113,21 +123,24 @@ mod tests {
 
     #[test]
     fn generate_correctly_sized_peer_id_inside_client_side_struct() -> Result<(), String> {
-        let client = ClientSide::new(Config::new()?)?;
+        let (tx, _rx) = mpsc::channel();
+        let client = ClientSide::new(Config::new()?, tx)?;
         assert_eq!(20, client.peer_id.len() * std::mem::size_of::<u8>());
         Ok(())
     }
 
     #[test]
     fn client_generator() -> Result<(), String> {
-        let client = ClientSide::new(Config::new()?)?;
+        let (tx, _rx) = mpsc::channel();
+        let client = ClientSide::new(Config::new()?, tx)?;
         assert_eq!(20, client.peer_id.len() * std::mem::size_of::<u8>());
         Ok(())
     }
 
     #[test]
     fn load_a_single_torrent_from_a_path_to_file() -> Result<(), String> {
-        let mut client = ClientSide::new(Config::new()?)?;
+        let (tx, _rx) = mpsc::channel();
+        let mut client = ClientSide::new(Config::new()?, tx)?;
         let command_line_args = vec!["tests/debian.torrent".to_string()].into_iter();
         client.load_torrents(command_line_args)?;
         /*assert_eq!(
@@ -139,7 +152,8 @@ mod tests {
 
     #[test]
     fn load_multiple_torrents_from_multiple_paths_to_files() -> Result<(), String> {
-        let mut client = ClientSide::new(Config::new()?)?;
+        let (tx, _rx) = mpsc::channel();
+        let mut client = ClientSide::new(Config::new()?, tx)?;
         let command_line_args = vec![
             "tests/debian.torrent".to_string(),
             "tests/fedora.torrent".to_string(),
@@ -158,7 +172,8 @@ mod tests {
 
     #[test]
     fn load_multiple_torrents_from_a_path_to_directory() -> Result<(), String> {
-        let mut client = ClientSide::new(Config::new()?)?;
+        let (tx, _rx) = mpsc::channel();
+        let mut client = ClientSide::new(Config::new()?, tx)?;
         let command_line_args = vec!["tests".to_string()].into_iter();
         client.load_torrents(command_line_args)?;
         /*assert!(client
@@ -185,7 +200,8 @@ mod tests {
 
     #[test]
     fn load_torrents_from_path_to_directory_without_torrents_should_fail() -> Result<(), String> {
-        let mut client = ClientSide::new(Config::new()?)?;
+        let (tx, _rx) = mpsc::channel();
+        let mut client = ClientSide::new(Config::new()?, tx)?;
         let args = vec!["src".to_string()].into_iter();
         assert!(client.load_torrents(args).is_err());
         Ok(())

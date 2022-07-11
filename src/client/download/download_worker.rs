@@ -2,17 +2,19 @@ use super::{download_info::DownloadInfo, peer::Peer};
 use crate::{
     client::{
         client_side::{DownloadedTorrents, TorrentReceiver, TorrentSender},
-        download::peer_protocol::DownloadError,
+        download::peer_protocol::ProtocolError,
         torrent_piece::TorrentPiece,
     },
     config::Config,
     logger::torrent_logger::LogMessage,
+    server::upload::torrent_upload_info::TorrentUploadInfo,
+    utils::ServerNotification,
 };
 use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::Path,
-    sync::{mpsc::Sender, Arc, Mutex},
+    sync::mpsc::Sender,
     thread::{self, JoinHandle},
 };
 
@@ -34,6 +36,7 @@ impl DownloadWorker {
         logger_tx: Sender<LogMessage>,
         client_id: [u8; 20],
         config: &Config,
+        notification_tx: Sender<ServerNotification>,
     ) -> DownloadWorker {
         let download_path = config.get_download_path();
         let pieces_until_release = config.get_torrent_time_slice();
@@ -64,16 +67,20 @@ impl DownloadWorker {
                     .send(torrent.clone())
                     .map_err(|err| err.to_string())?;
 
-                //CAMBIAR NOMBRE A START_DOWNLOAD
+                //CAMBIAR NOMBRE DE START_DOWNLOAD
                 torrent.start_download(client_id)?;
 
                 let (piece_tx, piece_rx_mutex) = torrent.get_pieces_handle();
                 let (peer_tx, peer_rx_mutex) = torrent.get_peers_handle();
                 let downloaded_mutex = torrent.get_downloaded();
-                let blacklist_mutex = torrent.get_blacklist();
 
                 let download_dir_path = format!("{download_path}/{}", torrent.get_name());
-                let download = DownloadInfo::new(client_id, torrent.get_hash(), download_dir_path);
+                let download = DownloadInfo::new(
+                    client_id,
+                    torrent.get_hash(),
+                    download_dir_path,
+                    torrent.get_total_pieces(),
+                );
 
                 let mut peer = Peer::new(Some([0; 20]), "".to_string(), 80, 0);
                 let mut connection = None;
@@ -144,14 +151,16 @@ impl DownloadWorker {
                         connection,
                         total_pieces,
                         download.clone(),
+                        downloaded_mutex.clone(),
                     ) {
                         Ok((stream, piece)) => (Some(stream), piece),
-                        Err(DownloadError::Connection(_)) => {
-                            update_blacklist(&blacklist_mutex, &peer, &peer_tx)?;
+                        Err(ProtocolError::Connection(_)) => {
+                            //update_blacklist(&blacklist_mutex, &peer, &peer_tx)?;
+                            peer_tx.send(peer.clone()).map_err(|err| err.to_string())?;
                             connection = None;
                             continue;
                         }
-                        Err(DownloadError::Piece(_)) => {
+                        Err(ProtocolError::Piece(_)) => {
                             piece_tx
                                 .send(DownloadMessage::Piece(target_piece))
                                 .map_err(|err| err.to_string())?;
@@ -169,6 +178,18 @@ impl DownloadWorker {
                     drop(downloaded);
 
                     store_piece(target_piece.get_index(), &piece, &download.get_path())?;
+
+                    // Send have new piece to server
+                    let pieces_qty = download.get_pieces_qty() as u32;
+                    target_piece.notify_present(
+                        notification_tx.clone(),
+                        TorrentUploadInfo::new(
+                            download.get_hash(),
+                            download.get_path(),
+                            pieces_qty,
+                        ),
+                    )?;
+
                     currently_downloaded += 1;
                     current_piece = None;
                 }
@@ -190,28 +211,6 @@ impl DownloadWorker {
     pub fn get_thread(&mut self) -> Option<JoinHandle<Result<(), String>>> {
         self.thread.take()
     }
-}
-
-fn update_blacklist(
-    blacklist_mutex: &Arc<Mutex<Vec<Peer>>>,
-    peer: &Peer,
-    peer_tx: &Sender<Peer>,
-) -> Result<(), String> {
-    let mut blacklist = blacklist_mutex
-        .lock()
-        .map_err(|_| "mutex lock error".to_string())?;
-
-    blacklist.push(peer.clone());
-    if blacklist.len() == blacklist.capacity() {
-        let aux_blacklist = blacklist.clone();
-        blacklist.clear();
-
-        for blacklisted in aux_blacklist {
-            peer_tx.send(blacklisted).map_err(|err| err.to_string())?;
-        }
-    }
-    drop(blacklist);
-    Ok(())
 }
 
 fn store_piece(piece_index: usize, piece_bytes: &[u8], download_path: &str) -> Result<(), String> {

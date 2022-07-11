@@ -1,6 +1,8 @@
 use crate::messages::message_type::{choke::Choke, have::Have, piece::Piece, unchoke::Unchoke};
 
-use super::message_type::bitfield::Bitfield;
+use super::message_type::{
+    bitfield::Bitfield, interested::Interested, not_interested::NotInterested, request::Request,
+};
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum PeerMessage {
@@ -9,22 +11,50 @@ pub enum PeerMessage {
     Unchoke(Unchoke),
     Piece(Piece),
     Choke(Choke),
+    Interested(Interested),
+    NotInterested(NotInterested),
+    Request(Request),
 }
 
 pub fn parse(bytes_read: Vec<u8>) -> Result<PeerMessage, String> {
     match bytes_read[0] {
         0 => Ok(PeerMessage::Choke(Choke::new())),
         1 => Ok(PeerMessage::Unchoke(Unchoke::new())),
+        2 => Ok(PeerMessage::Interested(Interested::new())),
+        3 => Ok(PeerMessage::NotInterested(NotInterested::new())),
         4 => parse_have(bytes_read),
-        5 => parse_bitfield(bytes_read),
+        5 => Ok(parse_bitfield(bytes_read)),
+        6 => parse_request(bytes_read),
         7 => parse_piece(bytes_read),
         _ => Err("error while parsing message bytes read".to_string()),
     }
 }
+
+pub fn parse_request(bytes: Vec<u8>) -> Result<PeerMessage, String> {
+    let index = u32::from_be_bytes(
+        bytes[1..5]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+    let begin = u32::from_be_bytes(
+        bytes[5..9]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+    let length = u32::from_be_bytes(
+        bytes[9..13]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+
+    Ok(PeerMessage::Request(Request::new(
+        index,
+        begin,
+        length as usize,
+    )))
+}
+
 pub fn parse_piece(bytes: Vec<u8>) -> Result<PeerMessage, String> {
-    if !is_piece_message(bytes.clone()) {
-        return Err("received message is not a bitfield".to_string());
-    }
     let index = u32::from_be_bytes(
         bytes[1..5]
             .try_into()
@@ -52,25 +82,11 @@ pub fn parse_have(bytes: Vec<u8>) -> Result<PeerMessage, String> {
     Ok(PeerMessage::Have(Have::new(piece_index)))
 }
 
-pub fn parse_bitfield(bytes: Vec<u8>) -> Result<PeerMessage, String> {
-    if !is_bitfield_message(bytes.clone()) {
-        return Err("received message is not a bitfield".to_string());
-    }
+pub fn parse_bitfield(bytes: Vec<u8>) -> PeerMessage {
     let bitfield = Vec::from(&bytes[1..]);
-    Ok(PeerMessage::Bitfield(Bitfield::new(
-        bitfield.len() as u32,
-        bitfield,
-    )))
+    PeerMessage::Bitfield(Bitfield::new(bitfield))
 }
 
 pub fn is_have_message(bytes: Vec<u8>) -> bool {
     bytes[0] == 4
-}
-
-pub fn is_bitfield_message(bytes: Vec<u8>) -> bool {
-    bytes[0] == 5
-}
-
-pub fn is_piece_message(bytes: Vec<u8>) -> bool {
-    bytes[0] == 7
 }

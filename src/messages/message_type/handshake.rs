@@ -34,6 +34,13 @@ impl HandShake {
         stream.write_all(&self.peer_id)?;
         Ok(())
     }
+
+    pub fn get_info_hash(&self) -> [u8; 20] {
+        self.info_hash
+    }
+    pub fn get_peer_id(&self) -> [u8; 20] {
+        self.peer_id
+    }
 }
 
 #[cfg(test)]
