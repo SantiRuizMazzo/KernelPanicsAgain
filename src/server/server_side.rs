@@ -7,7 +7,7 @@ use crate::{
 use std::{
     net::{Shutdown, TcpListener, TcpStream},
     sync::{mpsc::Receiver, mpsc::Sender},
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle, sleep}, time::Duration,
 };
 
 use super::upload::{torrent_upload_info::UploadInfo, upload_pool::UploadPool};
@@ -43,7 +43,7 @@ impl ServerSide {
         let log_tx = self.log_sender.clone();
 
         let _notification_thread: JoinHandle<Result<(), String>> = thread::spawn(move || {
-            let mut upload_pool = UploadPool::new();
+            let mut upload_pool = UploadPool::new(log_tx.clone());
 
             loop {
                 let notification = notification_receiver
@@ -53,18 +53,18 @@ impl ServerSide {
                 match notification {
                     ServerNotification::NewConnection(mut stream, received_handshake) => {
                         let _ = log_tx.send(LogMessage::Log(format!(
-                            "New connection detected! {:?}",
+                            "New connection detected! Received {:?}",
                             received_handshake
                         )));
 
                         let is_serving =
                             upload_pool.is_serving(received_handshake.get_info_hash())?;
                         if !is_serving {
-                            let _ = stream.shutdown(Shutdown::Both);
                             let _ = log_tx.send(LogMessage::Log(format!(
                                 "Torrent not served, Shuting down connection! {:?}",
                                 received_handshake
                             )));
+                            //let _ = stream.shutdown(Shutdown::Both);
                         } else {
                             let handshake = HandShake::new(
                                 "BitTorrent protocol".to_string(),
@@ -72,14 +72,13 @@ impl ServerSide {
                                 received_handshake.get_info_hash(),
                                 client_id,
                             );
-                            let _ = handshake.send(&mut stream);
 
                             if let Err(err) = handshake.send(&mut stream) {
                                 let _ = log_tx.send(LogMessage::Log(format!(
                                     "Error {err} sending handshake {:?}",
                                     handshake
                                 )));
-                                let _ = stream.shutdown(Shutdown::Both);
+                                //let _ = stream.shutdown(Shutdown::Both);
                                 continue;
                             }
 
@@ -89,13 +88,7 @@ impl ServerSide {
                                 let _ = log_tx.send(LogMessage::Log(format!(
                                     "Error {err} creating new worker",
                                 )));
-                                continue;
                             }
-
-                            let _ = log_tx.send(LogMessage::Log(format!(
-                                "New connection established! {:?}",
-                                handshake
-                            )));
                         }
                     }
                     ServerNotification::NewPiece(torrent_piece, torrent_upload_info) => {
@@ -126,6 +119,8 @@ impl ServerSide {
                         println!("Connection fail {:?}", e);
                     }
                 }
+
+                //sleep(Duration::from_secs(10));
             }
         });
         Ok(())

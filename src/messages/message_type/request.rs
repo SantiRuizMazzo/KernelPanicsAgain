@@ -1,7 +1,7 @@
+use super::cancel::Cancel;
+use super::piece::Piece;
 use std::io::Write;
 use std::net::TcpStream;
-
-use super::piece::Piece;
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Request {
@@ -52,5 +52,9 @@ impl Request {
 
     pub fn get_index(&self) -> u32 {
         self.index
+    }
+
+    pub fn cancel(&self) -> Cancel {
+        Cancel::new(self.index, self.begin, self.length)
     }
 }

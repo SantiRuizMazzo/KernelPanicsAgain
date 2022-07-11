@@ -6,7 +6,7 @@ use crate::{
     messages::{
         message_parser::{self, PeerMessage},
         message_type::{have::Have, unchoke::Unchoke},
-    },
+    }, logger::torrent_logger::LogMessage,
 };
 use std::{
     collections::HashMap,
@@ -29,7 +29,9 @@ impl UploadWorker {
         offered_torrents_mutex: Arc<Mutex<HashMap<[u8; 20], UploadInfo>>>,
         cleaner_tx: Sender<CleanerMessage>,
         hash_key: usize,
+        logger_tx: Sender<LogMessage>
     ) -> UploadWorker {
+
         let thread = thread::spawn(move || {
             let offered_torrents = offered_torrents_mutex
                 .lock()
@@ -77,18 +79,23 @@ impl UploadWorker {
                 };
 
                 let message = message_parser::parse(bytes_read).map_err(|err| err)?;
+                //let _ = logger_tx.send(LogMessage::Log(format!("< RECEIVED {message:?}")));
 
                 match message {
                     PeerMessage::Interested(_) => {
                         peer.set_interested();
                     }
                     PeerMessage::NotInterested(_) => peer.set_not_interested(),
-                    PeerMessage::Request(request) => peer_protocol::handle_request(
-                        &mut stream,
-                        request,
-                        download_path.clone(),
-                        &local_bitfield,
-                    )?,
+                    PeerMessage::Request(request) => {
+                        if peer_protocol::handle_request(
+                            &mut stream,
+                            request,
+                            download_path.clone(),
+                            &local_bitfield,
+                        ).is_err() {
+                            continue;
+                        }
+                    }
                     _ => {}
                 };
 
@@ -114,6 +121,7 @@ impl UploadWorker {
                 local_bitfield = updated_bitfield;
                 drop(offered_torrents);
             }
+
             let _ = cleaner_tx.send(CleanerMessage::RemoveWorker(hash_key));
             Ok(())
         });

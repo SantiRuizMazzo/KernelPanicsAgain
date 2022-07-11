@@ -227,7 +227,9 @@ pub fn handle_request(
     bitfield: &Bitfield,
 ) -> Result<(), String> {
     if !bitfield.contains(request.get_index() as usize) {
-        return Ok(()); // Ok to ignore missing piece
+        let cancel = request.cancel();
+        cancel.send(stream).map_err(|err| err.to_string())?;
+        return Err("requested piece is not being served".to_string())
     }
 
     let mut piece_to_send = request.generate_empty_piece();

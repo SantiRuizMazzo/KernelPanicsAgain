@@ -147,9 +147,14 @@ impl Peer {
                         break;
                     }
                 }
-                PeerMessage::Interested(_) => (),
-                PeerMessage::NotInterested(_) => (),
-                PeerMessage::Request(_) => (),
+                PeerMessage::Cancel(msg) => {
+                    return Err(ProtocolError::Piece(format!(
+                        "canceled piece {} beginning at {} request",
+                        msg.get_index(),
+                        msg.get_begin()
+                    )))
+                }
+                _ => {}
             }
         }
         Ok((stream, downloaded))

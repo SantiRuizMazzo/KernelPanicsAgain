@@ -1,7 +1,7 @@
 use super::{torrent_upload_info::UploadInfo, upload_worker::UploadWorker};
 use crate::{
     client::{download::peer::Peer, torrent_piece::TorrentPiece},
-    messages::message_type::handshake::HandShake,
+    messages::message_type::handshake::HandShake, logger::torrent_logger::LogMessage,
 };
 use std::{
     collections::HashMap,
@@ -25,19 +25,14 @@ pub struct UploadPool {
     offered_torrents: Arc<Mutex<HashMap<[u8; 20], UploadInfo>>>,
 }
 
-impl Default for UploadPool {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl UploadPool {
-    pub fn new() -> UploadPool {
+    pub fn new(logger_tx: Sender<LogMessage>) -> UploadPool {
         let offered_torrents = Arc::new(Mutex::new(HashMap::<[u8; 20], UploadInfo>::new()));
 
         let (cleaner_tx, cleaner_rx) = mpsc::channel::<CleanerMessage>();
         let offered_torrents_clone = offered_torrents.clone();
         let cleaner_tx_for_worker = cleaner_tx.clone();
+
         let worker_cleaner = thread::spawn(move || {
             let mut workers = HashMap::<usize, UploadWorker>::new();
 
@@ -56,7 +51,9 @@ impl UploadPool {
                             offered_torrents_clone.clone(),
                             cleaner_tx_for_worker.clone(),
                             workers.len(),
+                            logger_tx.clone()
                         );
+
                         let _ = workers.insert(workers.len(), new_worker);
                     }
                     CleanerMessage::RemoveWorker(key) => {

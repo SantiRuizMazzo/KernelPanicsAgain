@@ -1,7 +1,8 @@
 use crate::messages::message_type::{choke::Choke, have::Have, piece::Piece, unchoke::Unchoke};
 
 use super::message_type::{
-    bitfield::Bitfield, interested::Interested, not_interested::NotInterested, request::Request,
+    bitfield::Bitfield, cancel::Cancel, interested::Interested, not_interested::NotInterested,
+    request::Request,
 };
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -14,6 +15,7 @@ pub enum PeerMessage {
     Interested(Interested),
     NotInterested(NotInterested),
     Request(Request),
+    Cancel(Cancel),
 }
 
 pub fn parse(bytes_read: Vec<u8>) -> Result<PeerMessage, String> {
@@ -26,8 +28,29 @@ pub fn parse(bytes_read: Vec<u8>) -> Result<PeerMessage, String> {
         5 => Ok(parse_bitfield(bytes_read)),
         6 => parse_request(bytes_read),
         7 => parse_piece(bytes_read),
+        8 => parse_cancel(bytes_read),
         _ => Err("error while parsing message bytes read".to_string()),
     }
+}
+
+pub fn parse_cancel(bytes: Vec<u8>) -> Result<PeerMessage, String> {
+    let index = u32::from_be_bytes(
+        bytes[1..5]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+    let begin = u32::from_be_bytes(
+        bytes[5..9]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+    let length = u32::from_be_bytes(
+        bytes[9..13]
+            .try_into()
+            .map_err(|_| "conversion error".to_string())?,
+    );
+
+    Ok(PeerMessage::Cancel(Cancel::new(index, begin, length)))
 }
 
 pub fn parse_request(bytes: Vec<u8>) -> Result<PeerMessage, String> {
