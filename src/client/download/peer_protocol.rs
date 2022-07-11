@@ -133,7 +133,7 @@ pub fn handle_have(
         .iter()
         .any(|piece| piece.get_index() == new_piece_index);
 
-    if !(already_downloaded || *am_interested) {
+    if !already_downloaded && !*am_interested {
         *am_interested = true;
         Interested::new()
             .send(stream)

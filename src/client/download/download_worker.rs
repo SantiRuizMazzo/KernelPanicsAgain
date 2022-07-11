@@ -7,8 +7,7 @@ use crate::{
     },
     config::Config,
     logger::torrent_logger::LogMessage,
-    server::upload::torrent_upload_info::TorrentUploadInfo,
-    utils::ServerNotification,
+    server::{server_side::ServerNotification, upload::torrent_upload_info::UploadInfo},
 };
 use std::{
     fs::{self, OpenOptions},
@@ -32,7 +31,7 @@ impl DownloadWorker {
     pub fn new(
         id: usize,
         torrent_queue: (TorrentSender, TorrentReceiver),
-        downloaded_torrents: DownloadedTorrents,
+        downloaded_torrents_mutex: DownloadedTorrents,
         logger_tx: Sender<LogMessage>,
         client_id: [u8; 20],
         config: &Config,
@@ -45,23 +44,26 @@ impl DownloadWorker {
             let (torrent_tx, torrent_rx_mutex) = torrent_queue;
 
             loop {
-                let receiver = torrent_rx_mutex
+                let torrent_rx = torrent_rx_mutex
                     .lock()
                     .map_err(|_| "mutex lock error".to_string())?;
-                let mut torrent = receiver.recv().map_err(|err| err.to_string())?;
-                drop(receiver);
+                let mut torrent = torrent_rx.recv().map_err(|err| err.to_string())?;
+                drop(torrent_rx);
 
-                let downloaded = downloaded_torrents
+                let downloaded_torrents = downloaded_torrents_mutex
                     .lock()
                     .map_err(|_| "mutex lock error".to_string())?;
-                let already_downloaded = downloaded
+
+                let already_downloaded = downloaded_torrents
                     .iter()
-                    .any(|cur| cur.get_hash() == torrent.get_hash());
-                drop(downloaded);
+                    .any(|torr| torr.get_hash() == torrent.get_hash());
 
                 if already_downloaded {
+                    drop(downloaded_torrents);
                     continue;
                 }
+
+                drop(downloaded_torrents);
 
                 torrent_tx
                     .send(torrent.clone())
@@ -92,31 +94,28 @@ impl DownloadWorker {
                     let downloaded = downloaded_mutex
                         .lock()
                         .map_err(|_| "mutex lock error".to_string())?;
-                    let (current_pieces, total_pieces) = (downloaded.len(), downloaded.capacity());
-                    drop(downloaded);
 
-                    let progress = (current_pieces as f32 * 100_f32) / (total_pieces as f32);
-                    logger_tx
-                        .send(LogMessage::Log(format!(
-                            "{}: {current_pieces}/{total_pieces} ({progress:.2}%)",
-                            torrent.get_name()
-                        )))
-                        .map_err(|err| err.to_string())?;
+                    let (mut current_pieces, mut total_pieces) =
+                        (downloaded.len(), downloaded.capacity());
 
                     if current_pieces == total_pieces {
-                        let mut downloaded = downloaded_torrents
+                        let mut downloaded_torrents = downloaded_torrents_mutex
                             .lock()
                             .map_err(|_| "mutex lock error".to_string())?;
-                        let already_downloaded = downloaded
+
+                        let already_downloaded = downloaded_torrents
                             .iter()
-                            .any(|cur| cur.get_hash() == torrent.get_hash());
+                            .any(|torr| torr.get_hash() == torrent.get_hash());
 
                         if !already_downloaded {
-                            downloaded.push(torrent);
+                            downloaded_torrents.push(torrent);
                         }
+                        drop(downloaded_torrents);
                         drop(downloaded);
                         break;
                     }
+
+                    drop(downloaded);
 
                     if current_piece.is_none() {
                         let piece_rx = piece_rx_mutex
@@ -155,7 +154,6 @@ impl DownloadWorker {
                     ) {
                         Ok((stream, piece)) => (Some(stream), piece),
                         Err(ProtocolError::Connection(_)) => {
-                            //update_blacklist(&blacklist_mutex, &peer, &peer_tx)?;
                             peer_tx.send(peer.clone()).map_err(|err| err.to_string())?;
                             connection = None;
                             continue;
@@ -171,25 +169,34 @@ impl DownloadWorker {
                         }
                     };
 
-                    let mut downloaded = downloaded_mutex
-                        .lock()
-                        .map_err(|_| "mutex lock error".to_string())?;
-                    downloaded.push(target_piece);
-                    drop(downloaded);
-
                     store_piece(target_piece.get_index(), &piece, &download.get_path())?;
 
                     // Send have new piece to server
-                    let pieces_qty = download.get_pieces_qty() as u32;
                     target_piece.notify_present(
                         notification_tx.clone(),
-                        TorrentUploadInfo::new(
-                            download.get_hash(),
+                        UploadInfo::new(
+                            torrent.get_hash(),
                             download.get_path(),
-                            pieces_qty,
+                            torrent.get_total_pieces() as u32,
                         ),
                     )?;
 
+                    let mut downloaded = downloaded_mutex
+                        .lock()
+                        .map_err(|_| "mutex lock error".to_string())?;
+
+                    downloaded.push(target_piece);
+                    (current_pieces, total_pieces) = (downloaded.len(), downloaded.capacity());
+                    let progress = (current_pieces as f32 * 100_f32) / (total_pieces as f32);
+
+                    logger_tx
+                        .send(LogMessage::Log(format!(
+                            "Downloaded piece {} from {} - Progress: {current_pieces}/{total_pieces} ({progress:.2}%)",
+                            target_piece.get_index(), torrent.get_name()
+                        )))
+                        .map_err(|err| err.to_string())?;
+
+                    drop(downloaded);
                     currently_downloaded += 1;
                     current_piece = None;
                 }

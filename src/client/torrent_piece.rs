@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use crate::{server::upload::torrent_upload_info::TorrentUploadInfo, utils::ServerNotification};
+use crate::server::{server_side::ServerNotification, upload::torrent_upload_info::UploadInfo};
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct TorrentPiece {
@@ -32,11 +32,11 @@ impl TorrentPiece {
 
     pub fn notify_present(
         &self,
-        notification_sender: Sender<ServerNotification>,
-        upload_info: TorrentUploadInfo,
+        notification_tx: Sender<ServerNotification>,
+        upload_info: UploadInfo,
     ) -> Result<(), String> {
-        notification_sender
-            .send(ServerNotification::HavePiece(*self, upload_info))
+        notification_tx
+            .send(ServerNotification::NewPiece(*self, upload_info))
             .map_err(|err| err.to_string())
     }
 }

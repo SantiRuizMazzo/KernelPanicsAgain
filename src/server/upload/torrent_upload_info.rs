@@ -1,16 +1,16 @@
 use crate::messages::message_type::bitfield::Bitfield;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct TorrentUploadInfo {
+pub struct UploadInfo {
     info_hash: [u8; 20],
     download_path: String,
     bitfield: Option<Bitfield>,
     pieces_qty: u32,
 }
 
-impl TorrentUploadInfo {
-    pub fn new(info_hash: [u8; 20], download_path: String, pieces_qty: u32) -> TorrentUploadInfo {
-        TorrentUploadInfo {
+impl UploadInfo {
+    pub fn new(info_hash: [u8; 20], download_path: String, pieces_qty: u32) -> UploadInfo {
+        UploadInfo {
             info_hash,
             download_path,
             bitfield: None,

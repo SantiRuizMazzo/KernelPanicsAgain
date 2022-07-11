@@ -7,7 +7,7 @@ use crate::{
     client::torrent_piece::TorrentPiece,
     config::Config,
     logger::torrent_logger::LogMessage,
-    utils::ServerNotification,
+    server::server_side::ServerNotification,
 };
 use std::sync::{
     mpsc::{self, Receiver, Sender},
@@ -37,6 +37,7 @@ impl DownloadPool {
         let mut workers = Vec::with_capacity(config.get_max_download_connections());
 
         let _ = DownloadWorker::new(
+            // Worker creation to avoid clippy warning
             0,
             torrent_queue.clone(),
             downloaded_torrents.clone(),
@@ -64,7 +65,7 @@ impl DownloadPool {
 
     pub fn ids(&self) {
         for x in &self.workers {
-            println!("{}", x.get_id())
+            print!("{}", x.get_id())
         }
     }
 }

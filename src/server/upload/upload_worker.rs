@@ -11,11 +11,11 @@ use crate::{
 use std::{
     collections::HashMap,
     net::TcpStream,
-    sync::{Arc, Mutex},
+    sync::{mpsc::Sender, Arc, Mutex},
     thread::{self, JoinHandle},
 };
 
-use super::torrent_upload_info::TorrentUploadInfo;
+use super::{torrent_upload_info::UploadInfo, upload_pool::CleanerMessage};
 
 pub struct UploadWorker {
     thread: Option<JoinHandle<Result<(), String>>>,
@@ -26,7 +26,9 @@ impl UploadWorker {
         mut stream: TcpStream,
         mut peer: Peer,
         info_hash: [u8; 20],
-        offered_torrents_mutex: Arc<Mutex<HashMap<[u8; 20], TorrentUploadInfo>>>,
+        offered_torrents_mutex: Arc<Mutex<HashMap<[u8; 20], UploadInfo>>>,
+        cleaner_tx: Sender<CleanerMessage>,
+        hash_key: usize,
     ) -> UploadWorker {
         let thread = thread::spawn(move || {
             let offered_torrents = offered_torrents_mutex
@@ -36,16 +38,15 @@ impl UploadWorker {
                 .get(&info_hash)
                 .ok_or_else(|| "Torrent is not served by this peer".to_string())?;
 
-            let local_bitfield = upload_info.get_bitfield();
+            let mut local_bitfield = upload_info
+                .get_bitfield()
+                .ok_or_else(|| "Torrent is not served by this peer".to_string())?;
             let download_path = upload_info.get_path();
             drop(offered_torrents);
 
-            let mut bitfield = match local_bitfield {
-                Some(bitfield) => bitfield,
-                None => return Err("xd".to_string()),
-            };
-
-            bitfield.send(&mut stream).map_err(|err| err.to_string())?;
+            local_bitfield
+                .send(&mut stream)
+                .map_err(|err| err.to_string())?;
 
             loop {
                 if peer.is_interested() && peer.is_choked() {
@@ -86,7 +87,7 @@ impl UploadWorker {
                         &mut stream,
                         request,
                         download_path.clone(),
-                        &bitfield,
+                        &local_bitfield,
                     )?,
                     _ => {}
                 };
@@ -98,26 +99,22 @@ impl UploadWorker {
                     .get(&info_hash)
                     .ok_or_else(|| "Torrent is not served by this peer".to_string())?;
 
-                let updated_bitfield = upload_info.get_bitfield();
-                drop(offered_torrents);
+                let updated_bitfield = upload_info
+                    .get_bitfield()
+                    .ok_or_else(|| "Torrent is not served by this peer".to_string())?;
 
-                let updated_bitfield = match updated_bitfield {
-                    Some(bitfield) => bitfield,
-                    None => return Err("xd".to_string()),
-                };
-
-                //local_bitfield.update(updated_bitfield)
-                for index in 0..(bitfield.get_bits().len() * 8) {
-                    if (!bitfield.contains(index)) && updated_bitfield.contains(index) {
+                for index in 0..(local_bitfield.get_bits().len() * 8) {
+                    if (!local_bitfield.contains(index)) && updated_bitfield.contains(index) {
                         Have::new(index as u32)
                             .send(&mut stream)
                             .map_err(|err| err.to_string())?;
                     }
                 }
 
-                bitfield = updated_bitfield;
+                local_bitfield = updated_bitfield;
+                drop(offered_torrents);
             }
-
+            let _ = cleaner_tx.send(CleanerMessage::RemoveWorker(hash_key));
             Ok(())
         });
 

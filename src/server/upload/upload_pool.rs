@@ -1,4 +1,4 @@
-use super::{torrent_upload_info::TorrentUploadInfo, upload_worker::UploadWorker};
+use super::{torrent_upload_info::UploadInfo, upload_worker::UploadWorker};
 use crate::{
     client::{download::peer::Peer, torrent_piece::TorrentPiece},
     messages::message_type::handshake::HandShake,
@@ -6,12 +6,23 @@ use crate::{
 use std::{
     collections::HashMap,
     net::TcpStream,
-    sync::{Arc, Mutex},
+    sync::{
+        mpsc::{self, Sender},
+        Arc, Mutex,
+    },
+    thread::{self, JoinHandle},
 };
 
+pub enum CleanerMessage {
+    AddWorker(TcpStream, HandShake),
+    RemoveWorker(usize),
+    Kill,
+}
+
 pub struct UploadPool {
-    workers: Vec<UploadWorker>,
-    offered_torrents: Arc<Mutex<HashMap<[u8; 20], TorrentUploadInfo>>>,
+    worker_cleaner: Option<JoinHandle<Result<(), String>>>,
+    cleaner_tx: Sender<CleanerMessage>,
+    offered_torrents: Arc<Mutex<HashMap<[u8; 20], UploadInfo>>>,
 }
 
 impl Default for UploadPool {
@@ -22,12 +33,61 @@ impl Default for UploadPool {
 
 impl UploadPool {
     pub fn new() -> UploadPool {
-        let workers = Vec::<UploadWorker>::new();
-        let offered_torrents = Arc::new(Mutex::new(HashMap::<[u8; 20], TorrentUploadInfo>::new()));
-        // let mut worker_states =  Arc::new(Mutex::new(Vec::<WorkerState>::new()));
+        let offered_torrents = Arc::new(Mutex::new(HashMap::<[u8; 20], UploadInfo>::new()));
+
+        let (cleaner_tx, cleaner_rx) = mpsc::channel::<CleanerMessage>();
+        let offered_torrents_clone = offered_torrents.clone();
+        let cleaner_tx_for_worker = cleaner_tx.clone();
+        let worker_cleaner = thread::spawn(move || {
+            let mut workers = HashMap::<usize, UploadWorker>::new();
+
+            loop {
+                match cleaner_rx.recv().map_err(|err| err.to_string())? {
+                    CleanerMessage::AddWorker(stream, received_handshake) => {
+                        let peer_addr = stream.peer_addr().map_err(|error| error.to_string())?;
+                        let ip = peer_addr.ip().to_string();
+                        let port = peer_addr.port() as u32;
+                        let peer = Peer::new(Some(received_handshake.get_peer_id()), ip, port, 0);
+
+                        let new_worker = UploadWorker::new(
+                            stream,
+                            peer,
+                            received_handshake.get_info_hash(),
+                            offered_torrents_clone.clone(),
+                            cleaner_tx_for_worker.clone(),
+                            workers.len(),
+                        );
+                        let _ = workers.insert(workers.len(), new_worker);
+                    }
+                    CleanerMessage::RemoveWorker(key) => {
+                        UploadPool::remove_worker(&mut workers, key)
+                    }
+                    CleanerMessage::Kill => {
+                        for (_, mut worker) in workers.drain() {
+                            if let Some(thread) = worker.get_thread() {
+                                let _ = thread.join();
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            Ok(())
+        });
+
         UploadPool {
-            workers,
+            worker_cleaner: Some(worker_cleaner),
+            cleaner_tx,
             offered_torrents,
+        }
+    }
+
+    fn remove_worker(workers: &mut HashMap<usize, UploadWorker>, worker_id: usize) {
+        if let Some(mut worker) = workers.remove(&worker_id) {
+            if let Some(thread) = worker.get_thread() {
+                let _ = thread.join();
+            }
         }
     }
 
@@ -36,24 +96,16 @@ impl UploadPool {
         stream: TcpStream,
         received_handshake: HandShake,
     ) -> Result<(), String> {
-        let peer_addr = stream.peer_addr().map_err(|error| error.to_string())?;
-        let ip = peer_addr.ip().to_string();
-        let port = peer_addr.port() as u32;
-        let peer = Peer::new(Some(received_handshake.get_peer_id()), ip, port, 0);
-
-        self.workers.push(UploadWorker::new(
-            stream,
-            peer,
-            received_handshake.get_info_hash(),
-            self.offered_torrents.clone(),
-        ));
+        self.cleaner_tx
+            .send(CleanerMessage::AddWorker(stream, received_handshake))
+            .map_err(|error| error.to_string())?;
         Ok(())
     }
 
     pub fn offer_new_piece(
         &mut self,
         piece: TorrentPiece,
-        upload_info: TorrentUploadInfo,
+        upload_info: UploadInfo,
     ) -> Result<(), String> {
         let mut offered = self
             .offered_torrents
@@ -67,30 +119,27 @@ impl UploadPool {
 
         info_to_insert.add_piece_to_bitfield(piece.get_index())?;
         offered.insert(info_to_insert.get_hash(), info_to_insert.clone());
-
         Ok(())
     }
 
-    pub fn is_torrent_offered(&self, info_hash: [u8; 20]) -> Result<bool, String> {
+    pub fn is_serving(&self, info_hash: [u8; 20]) -> Result<bool, String> {
         let offered = self
             .offered_torrents
             .lock()
             .map_err(|err| err.to_string())?;
 
-        if let Some(_upload_info) = offered.get(&info_hash) {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        Ok(offered.contains_key(&info_hash))
     }
 }
 
 impl Drop for UploadPool {
     fn drop(&mut self) {
-        for worker in &mut self.workers {
-            if let Some(thread) = worker.get_thread() {
-                let _ = thread.join();
-            }
+        let _ = self
+            .cleaner_tx
+            .send(CleanerMessage::Kill)
+            .map_err(|error| error.to_string());
+        if let Some(thread) = self.worker_cleaner.take() {
+            let _ = thread.join();
         }
     }
 }

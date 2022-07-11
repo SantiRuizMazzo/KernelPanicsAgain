@@ -1,14 +1,23 @@
 use crate::{
-    client::download::peer_protocol, config::Config, logger::torrent_logger::LogMessage,
-    messages::message_type::handshake::HandShake, utils::ServerNotification,
+    client::{download::peer_protocol, torrent_piece::TorrentPiece},
+    config::Config,
+    logger::torrent_logger::LogMessage,
+    messages::message_type::handshake::HandShake,
 };
 use std::{
-    net::{Shutdown, TcpListener},
+    net::{Shutdown, TcpListener, TcpStream},
     sync::{mpsc::Receiver, mpsc::Sender},
     thread::{self, JoinHandle},
 };
 
-use super::upload::upload_pool::UploadPool;
+use super::upload::{torrent_upload_info::UploadInfo, upload_pool::UploadPool};
+
+#[derive(Debug)]
+pub enum ServerNotification {
+    NewConnection(TcpStream, HandShake),
+    NewPiece(TorrentPiece, UploadInfo),
+    Kill,
+}
 
 pub struct ServerSide {
     config: Config,
@@ -48,10 +57,14 @@ impl ServerSide {
                             received_handshake
                         )));
 
-                        let is_offered =
-                            upload_pool.is_torrent_offered(received_handshake.get_info_hash())?;
-                        if !is_offered {
+                        let is_serving =
+                            upload_pool.is_serving(received_handshake.get_info_hash())?;
+                        if !is_serving {
                             let _ = stream.shutdown(Shutdown::Both);
+                            let _ = log_tx.send(LogMessage::Log(format!(
+                                "Torrent not served, Shuting down connection! {:?}",
+                                received_handshake
+                            )));
                         } else {
                             let handshake = HandShake::new(
                                 "BitTorrent protocol".to_string(),
@@ -60,16 +73,37 @@ impl ServerSide {
                                 client_id,
                             );
                             let _ = handshake.send(&mut stream);
-                            let _result =
-                                upload_pool.add_new_connection(stream, received_handshake);
+
+                            if let Err(err) = handshake.send(&mut stream) {
+                                let _ = log_tx.send(LogMessage::Log(format!(
+                                    "Error {err} sending handshake {:?}",
+                                    handshake
+                                )));
+                                let _ = stream.shutdown(Shutdown::Both);
+                                continue;
+                            }
+
+                            if let Err(err) =
+                                upload_pool.add_new_connection(stream, received_handshake)
+                            {
+                                let _ = log_tx.send(LogMessage::Log(format!(
+                                    "Error {err} creating new worker",
+                                )));
+                                continue;
+                            }
+
+                            let _ = log_tx.send(LogMessage::Log(format!(
+                                "New connection established! {:?}",
+                                handshake
+                            )));
                         }
                     }
-                    ServerNotification::HavePiece(torrent_piece, torrent_upload_info) => {
+                    ServerNotification::NewPiece(torrent_piece, torrent_upload_info) => {
                         // Update current bitfield for torrent
                         upload_pool.offer_new_piece(torrent_piece, torrent_upload_info)?;
                         // Send
                     }
-                    ServerNotification::Terminate => break,
+                    ServerNotification::Kill => break,
                 }
             }
             Ok(())

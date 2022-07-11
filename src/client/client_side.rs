@@ -1,7 +1,6 @@
 use crate::config::Config;
-use crate::{
-    client::torrent::Torrent, logger::torrent_logger::LogMessage, utils::ServerNotification,
-};
+use crate::server::server_side::ServerNotification;
+use crate::{client::torrent::Torrent, logger::torrent_logger::LogMessage};
 use rand::Rng;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};

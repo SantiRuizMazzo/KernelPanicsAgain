@@ -1,15 +1,9 @@
 use std::{
     fs::File,
     io::{Read, Write},
-    net::TcpStream,
 };
 
 use sha1::{Digest, Sha1};
-
-use crate::{
-    client::torrent_piece::TorrentPiece, messages::message_type::handshake::HandShake,
-    server::upload::torrent_upload_info::TorrentUploadInfo,
-};
 
 /// Returns a 20-byte array containing the result of applying SHA1 hash algorithm to the given collection of bytes.
 pub fn sha1(bytes: impl AsRef<[u8]>) -> Result<[u8; 20], String> {
@@ -50,11 +44,4 @@ pub fn read_piece_file(download_path: String, piece_index: usize) -> Result<Vec<
 pub fn append_to_file(file: &mut File, bytes_to_append: Vec<u8>) -> Result<(), String> {
     file.write_all(&bytes_to_append)
         .map_err(|err| err.to_string())
-}
-
-#[derive(Debug)]
-pub enum ServerNotification {
-    NewConnection(TcpStream, HandShake),
-    HavePiece(TorrentPiece, TorrentUploadInfo),
-    Terminate,
 }
