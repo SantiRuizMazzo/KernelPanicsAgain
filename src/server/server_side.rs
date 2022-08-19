@@ -1,132 +1,94 @@
-use crate::{
-    client::{download::peer_protocol, torrent_piece::TorrentPiece},
-    config::Config,
-    logger::torrent_logger::LogMessage,
-    messages::message_type::handshake::HandShake,
-};
+use crate::{client::piece::Piece, config::Config, logging::log_handle::LogHandle};
 use std::{
-    net::{Shutdown, TcpListener, TcpStream},
-    sync::{mpsc::Receiver, mpsc::Sender},
-    thread::{self, JoinHandle, sleep}, time::Duration,
+    net::{TcpListener, TcpStream},
+    sync::{
+        mpsc::Receiver,
+        mpsc::{SendError, Sender},
+    },
+    thread::{self, JoinHandle},
 };
 
-use super::upload::{torrent_upload_info::UploadInfo, upload_pool::UploadPool};
+use super::upload::{upload_info::UploadInfo, upload_pool::UploadPool};
 
 #[derive(Debug)]
-pub enum ServerNotification {
-    NewConnection(TcpStream, HandShake),
-    NewPiece(TorrentPiece, UploadInfo),
-    Kill,
+pub enum Notification {
+    NewPiece(Piece, UploadInfo),
+    NewPeer(TcpStream),
+    EndPeer(usize),
+    EndServer,
 }
 
 pub struct ServerSide {
+    id: [u8; 20],
     config: Config,
-    peer_id: [u8; 20],
-    log_sender: Sender<LogMessage>,
+    log_handle: LogHandle,
 }
 
 impl ServerSide {
-    pub fn new(config: Config, log_sender: Sender<LogMessage>) -> ServerSide {
-        ServerSide {
-            config,
-            peer_id: [0; 20],
-            log_sender,
+    pub fn new(id: [u8; 20], config: &Config, log_handle: LogHandle) -> Self {
+        Self {
+            id,
+            config: config.clone(),
+            log_handle,
         }
     }
 
     pub fn init(
         &mut self,
-        notification_sender: Sender<ServerNotification>,
-        notification_receiver: Receiver<ServerNotification>,
+        notif_tx: Sender<Notification>,
+        notif_rx: Receiver<Notification>,
     ) -> Result<(), String> {
-        let client_id = self.peer_id;
-        let log_tx = self.log_sender.clone();
+        let _notification_thread = self.init_notifications(notif_tx.clone(), notif_rx)?;
+        let _connection_thread = self.init_connections(notif_tx)?;
+        Ok(())
+        //Fix: notification and connection remain as zombie threads, must store their handles and join them
+    }
 
-        let _notification_thread: JoinHandle<Result<(), String>> = thread::spawn(move || {
-            let mut upload_pool = UploadPool::new(log_tx.clone());
+    fn init_notifications(
+        &self,
+        notif_tx: Sender<Notification>,
+        notif_rx: Receiver<Notification>,
+    ) -> Result<JoinHandle<Result<(), String>>, String> {
+        let log_handle = self.log_handle.clone();
+        let mut pool = UploadPool::new(self.id);
 
-            loop {
-                let notification = notification_receiver
-                    .recv()
-                    .map_err(|_| "Error while reading from notification channel".to_string())?;
-
+        let thread: JoinHandle<Result<(), String>> = thread::spawn(move || {
+            for notification in notif_rx {
                 match notification {
-                    ServerNotification::NewConnection(mut stream, received_handshake) => {
-                        let _ = log_tx.send(LogMessage::Log(format!(
-                            "New connection detected! Received {:?}",
-                            received_handshake
-                        )));
-
-                        let is_serving =
-                            upload_pool.is_serving(received_handshake.get_info_hash())?;
-                        if !is_serving {
-                            let _ = log_tx.send(LogMessage::Log(format!(
-                                "Torrent not served, Shuting down connection! {:?}",
-                                received_handshake
-                            )));
-                            //let _ = stream.shutdown(Shutdown::Both);
-                        } else {
-                            let handshake = HandShake::new(
-                                "BitTorrent protocol".to_string(),
-                                [0; 8],
-                                received_handshake.get_info_hash(),
-                                client_id,
-                            );
-
-                            if let Err(err) = handshake.send(&mut stream) {
-                                let _ = log_tx.send(LogMessage::Log(format!(
-                                    "Error {err} sending handshake {:?}",
-                                    handshake
-                                )));
-                                //let _ = stream.shutdown(Shutdown::Both);
-                                continue;
-                            }
-
-                            if let Err(err) =
-                                upload_pool.add_new_connection(stream, received_handshake)
-                            {
-                                let _ = log_tx.send(LogMessage::Log(format!(
-                                    "Error {err} creating new worker",
-                                )));
-                            }
+                    Notification::NewPiece(piece, upload_info) => {
+                        log_handle.log(&format!("Started serving piece {}", piece.index()))?;
+                        pool.add_piece(piece, upload_info)?;
+                    }
+                    Notification::NewPeer(stream) => {
+                        if let Err(e) = pool.add_worker(stream, &notif_tx, &log_handle) {
+                            log_handle.log(&format!("Worker creation error: {e}"))?;
                         }
                     }
-                    ServerNotification::NewPiece(torrent_piece, torrent_upload_info) => {
-                        // Update current bitfield for torrent
-                        upload_pool.offer_new_piece(torrent_piece, torrent_upload_info)?;
-                        // Send
+                    Notification::EndPeer(id) => {
+                        pool.remove_worker(id)?;
+                        log_handle.log(&format!("Removing worker {id}"))?;
                     }
-                    ServerNotification::Kill => break,
+                    Notification::EndServer => break,
                 }
             }
             Ok(())
         });
-
-        let sender_connections = notification_sender;
-        let listener =
-            TcpListener::bind(self.config.get_server_address()).map_err(|err| err.to_string())?;
-
-        let _connection_thread = thread::spawn(move || {
-            for stream in listener.incoming() {
-                match stream {
-                    Ok(mut stream) => {
-                        if let Ok(handshake) = peer_protocol::handle_hs_receiving(&mut stream) {
-                            let _ = sender_connections
-                                .send(ServerNotification::NewConnection(stream, handshake));
-                        }
-                    }
-                    Err(e) => {
-                        println!("Connection fail {:?}", e);
-                    }
-                }
-
-                //sleep(Duration::from_secs(10));
-            }
-        });
-        Ok(())
+        Ok(thread)
     }
 
-    pub fn set_peer_id(&mut self, peer_id: [u8; 20]) {
-        self.peer_id = peer_id;
+    fn init_connections(
+        &self,
+        notif_tx: Sender<Notification>,
+    ) -> Result<JoinHandle<Result<(), SendError<Notification>>>, String> {
+        let socket = TcpListener::bind(self.config.server_address()).map_err(|e| e.to_string())?;
+
+        //Fix: loop never ends, must implement a way to kill connection thread
+        let thread: JoinHandle<Result<(), SendError<Notification>>> = thread::spawn(move || {
+            for stream in socket.incoming().flatten() {
+                notif_tx.send(Notification::NewPeer(stream))?
+            }
+            Ok(())
+        });
+        Ok(thread)
     }
 }

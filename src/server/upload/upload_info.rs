@@ -1,28 +1,28 @@
-use crate::messages::message_type::bitfield::Bitfield;
+use crate::messages::message_types::bitfield::Bitfield;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct UploadInfo {
     info_hash: [u8; 20],
     download_path: String,
     bitfield: Option<Bitfield>,
-    pieces_qty: u32,
+    total_pieces: usize,
 }
 
 impl UploadInfo {
-    pub fn new(info_hash: [u8; 20], download_path: String, pieces_qty: u32) -> UploadInfo {
-        UploadInfo {
+    pub fn new(info_hash: [u8; 20], download_path: String, total_pieces: usize) -> Self {
+        Self {
             info_hash,
             download_path,
             bitfield: None,
-            pieces_qty,
+            total_pieces,
         }
     }
 
-    pub fn get_hash(&self) -> [u8; 20] {
+    pub fn info_hash(&self) -> [u8; 20] {
         self.info_hash
     }
 
-    pub fn get_path(&self) -> String {
+    pub fn download_path(&self) -> String {
         self.download_path.clone()
     }
 
@@ -31,9 +31,9 @@ impl UploadInfo {
             Some(msg) => msg,
             None => {
                 let mut bitfield_vec = Vec::<u8>::new();
-                let mut byte_amount = self.pieces_qty / 8;
+                let mut byte_amount = self.total_pieces / 8;
 
-                if self.pieces_qty % 8 > 0 {
+                if self.total_pieces % 8 > 0 {
                     byte_amount += 1;
                 }
 
@@ -45,16 +45,12 @@ impl UploadInfo {
             }
         };
 
-        bitfield.set_have_piece(piece_index as usize);
-        self.set_bitfield(bitfield);
+        bitfield.add_piece(piece_index as usize);
+        self.bitfield = Some(bitfield);
         Ok(())
     }
 
-    pub fn set_bitfield(&mut self, bitfield: Bitfield) {
-        self.bitfield = Some(bitfield);
-    }
-
-    pub fn get_bitfield(&self) -> Option<Bitfield> {
+    pub fn bitfield(&self) -> Option<Bitfield> {
         self.bitfield.clone()
     }
 }

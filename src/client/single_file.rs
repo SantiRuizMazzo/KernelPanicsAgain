@@ -6,7 +6,7 @@ pub struct SingleFile {
 }
 
 impl SingleFile {
-    pub fn new(length: i64, path: String) -> SingleFile {
-        SingleFile { length, path }
+    pub fn new(length: i64, path: String) -> Self {
+        Self { length, path }
     }
 }

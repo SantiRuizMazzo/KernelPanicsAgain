@@ -1,8 +1,13 @@
-use std::io::Write;
-use std::net::TcpStream;
+use crate::client::download::peer_protocol::ProtocolError;
+use std::{
+    io::{Error, Write},
+    net::TcpStream,
+};
+
+pub const HANDSHAKE_PSTR: &str = "BitTorrent protocol";
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct HandShake {
+pub struct Handshake {
     pstrlen: u8,
     pstr: String,
     reserved: [u8; 8],
@@ -10,35 +15,30 @@ pub struct HandShake {
     info_hash: [u8; 20],
 }
 
-impl HandShake {
-    pub fn new(
-        pstr: String,
-        reserved: [u8; 8],
-        info_hash: [u8; 20],
-        peer_id: [u8; 20],
-    ) -> HandShake {
-        HandShake {
+impl Handshake {
+    pub fn new(pstr: &str, reserved: [u8; 8], info_hash: [u8; 20], peer_id: [u8; 20]) -> Self {
+        Self {
             pstrlen: pstr.len() as u8,
-            pstr,
+            pstr: pstr.to_string(),
             reserved,
             peer_id,
             info_hash,
         }
     }
 
-    pub fn send(&self, stream: &mut TcpStream) -> std::io::Result<()> {
-        stream.write_all(&self.pstrlen.to_be_bytes())?;
-        stream.write_all(self.pstr.as_bytes())?;
-        stream.write_all(&self.reserved)?;
-        stream.write_all(&self.info_hash)?;
-        stream.write_all(&self.peer_id)?;
-        Ok(())
+    pub fn send(&self, stream: &mut TcpStream) -> Result<(), ProtocolError> {
+        let err = |e: Error| ProtocolError::Peer(format!("Failed sending {self:?} ({e})"));
+        stream.write_all(&self.pstrlen.to_be_bytes()).map_err(err)?;
+        stream.write_all(self.pstr.as_bytes()).map_err(err)?;
+        stream.write_all(&self.reserved).map_err(err)?;
+        stream.write_all(&self.info_hash).map_err(err)?;
+        stream.write_all(&self.peer_id).map_err(err)
     }
 
-    pub fn get_info_hash(&self) -> [u8; 20] {
+    pub fn info_hash(&self) -> [u8; 20] {
         self.info_hash
     }
-    pub fn get_peer_id(&self) -> [u8; 20] {
+    pub fn peer_id(&self) -> [u8; 20] {
         self.peer_id
     }
 }
@@ -52,15 +52,10 @@ mod tests {
         let empty_array = [0; 20];
         let peer_id = *b"-PK0001-144591253628";
         let reserved = [0; 8];
-        let handshake = HandShake::new(
-            "BitTorrent protocol".to_string(),
-            reserved,
-            empty_array,
-            peer_id,
-        );
+        let handshake = Handshake::new(HANDSHAKE_PSTR, reserved, empty_array, peer_id);
 
         assert_eq!(19, handshake.pstrlen);
-        assert_eq!("BitTorrent protocol".to_string(), handshake.pstr);
+        assert_eq!(HANDSHAKE_PSTR, handshake.pstr);
         assert_eq!(*b"-PK0001-144591253628", handshake.peer_id);
         assert_eq!(reserved, handshake.reserved);
         assert_eq!(empty_array, handshake.info_hash);
@@ -71,13 +66,7 @@ mod tests {
         let empty_array = [0; 20];
         let peer_id = *b"-PK0001-144591253628";
         let reserved = [0; 8];
-
-        let handshake = HandShake::new(
-            "BitTorrent protocol".to_string(),
-            reserved,
-            peer_id,
-            empty_array,
-        );
+        let handshake = Handshake::new(HANDSHAKE_PSTR, reserved, peer_id, empty_array);
 
         assert_eq!(
             68,

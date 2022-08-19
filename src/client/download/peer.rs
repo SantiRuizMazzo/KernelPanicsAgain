@@ -1,163 +1,253 @@
 use crate::{
-    client::download::peer_protocol::{
-        handle_bitfield, handle_choke, handle_have, handle_piece, handle_unchoke,
-        read_id_and_payload, read_len,
-    },
+    client::{piece::Piece, torrent::Torrent},
+    logging::log_handle::LogHandle,
     messages::{
-        message_parser::{self, PeerMessage},
-        message_type::request::Request,
+        message_types::{bitfield::Bitfield, interested::Interested, request::Request},
+        peer_message::PeerMessage,
     },
 };
 
 use super::{
-    super::torrent_piece::TorrentPiece,
-    download_info::DownloadInfo,
     download_pool::DownloadedPieces,
-    peer_protocol::{self, ProtocolError, BLOCK_SIZE},
+    peer_protocol::{self, ProtocolError},
 };
-use std::net::TcpStream;
+use std::{net::TcpStream, time::Duration};
 
 /// Stores information about each peer in the peer list that is provided by the tracker.
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(Debug)]
 pub struct Peer {
     id: Option<[u8; 20]>,
     ip: String,
-    port: u32,
-    index: usize,
-    bitfield: Vec<u8>,
+    port: u16,
+    bitfield: Bitfield,
     am_interested: bool,
     am_choked: bool,
     is_interested: bool,
     is_choked: bool,
+    connection: Option<TcpStream>,
+    last_request: Request,
 }
 
-impl Peer {
-    pub fn new(id: Option<[u8; 20]>, ip: String, port: u32, index: usize) -> Peer {
-        Peer {
-            id,
-            ip,
-            port,
-            index,
-            bitfield: Vec::new(),
+impl PartialEq for Peer {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.ip == other.ip
+            && self.port == other.port
+            && self.bitfield == other.bitfield
+            && self.am_interested == other.am_interested
+            && self.am_choked == other.am_choked
+            && self.is_interested == other.is_interested
+            && self.is_choked == other.is_choked
+    }
+}
+
+impl Eq for Peer {}
+
+impl Clone for Peer {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            ip: self.ip.clone(),
+            port: self.port,
+            bitfield: self.bitfield.clone(),
+            am_interested: self.am_interested,
+            am_choked: self.am_choked,
+            is_interested: self.is_interested,
+            is_choked: self.is_choked,
+            connection: None,
+            last_request: Request::default(),
+        }
+    }
+}
+
+impl Default for Peer {
+    fn default() -> Self {
+        Self {
+            id: None,
+            ip: "localhost".to_string(),
+            port: 6881,
+            bitfield: Bitfield::default(),
             am_interested: false,
             am_choked: true,
             is_interested: false,
             is_choked: true,
+            connection: None,
+            last_request: Request::default(),
         }
     }
-    pub fn get_id(&self) -> Option<[u8; 20]> {
+}
+
+impl Peer {
+    pub fn new(id: Option<[u8; 20]>, ip: String, port: u16) -> Self {
+        Self {
+            id,
+            ip,
+            port,
+            bitfield: Bitfield::default(),
+            am_interested: false,
+            am_choked: true,
+            is_interested: false,
+            is_choked: true,
+            connection: None,
+            last_request: Request::default(),
+        }
+    }
+
+    pub fn id(&self) -> Option<[u8; 20]> {
         self.id
     }
-    pub fn get_ip(&self) -> String {
+
+    pub fn ip(&self) -> String {
         self.ip.clone()
     }
-    pub fn get_port(&self) -> u32 {
+
+    pub fn port(&self) -> u16 {
         self.port
     }
-    pub fn get_address(&self) -> String {
+
+    pub fn address(&self) -> String {
         format!("{}:{}", self.ip, self.port)
     }
 
-    pub fn connect(&mut self, download: DownloadInfo) -> Result<TcpStream, ProtocolError> {
-        match TcpStream::connect(self.get_address()) {
-            Ok(mut stream) => {
-                peer_protocol::handle_handshake(&mut stream, download)
-                    .map_err(ProtocolError::Connection)?;
-                Ok(stream)
+    fn open_connection(
+        &mut self,
+        client_id: [u8; 20],
+        torrent: &Torrent,
+        log_handle: LogHandle,
+    ) -> Result<TcpStream, ProtocolError> {
+        /*log_handle
+        .log(&format!("Connecting to: {}", self.address()))
+        .map_err(ProtocolError::Peer)?;*/
+        let mut stream =
+            TcpStream::connect(self.address()).map_err(|e| ProtocolError::Peer(e.to_string()))?;
+        /*log_handle
+        .log(&format!("Connected to: {}", self.address()))
+        .map_err(ProtocolError::Peer)?;*/
+        peer_protocol::handle_handshakes(&mut stream, client_id, torrent.info_hash())?;
+        log_handle
+            .log(&format!("Handshaked with: {}", self.address()))
+            .map_err(ProtocolError::Peer)?;
+        self.bitfield.set_size(torrent.total_pieces());
+        stream
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .map_err(|e| ProtocolError::Peer(e.to_string()))?;
+        Ok(stream)
+    }
+
+    fn reuse_connection(
+        &mut self,
+        mut stream: TcpStream,
+        piece_index: usize,
+        _log_handle: LogHandle,
+    ) -> Result<TcpStream, ProtocolError> {
+        if self.bitfield.contains(piece_index) {
+            if !self.am_interested {
+                let interested = Interested::new();
+                interested.send(&mut stream)?;
+                self.am_interested = true;
+                //let _ = log_handle.log(&format!("> {interested:?}"));
             }
-            Err(err) => Err(ProtocolError::Connection(err.to_string())),
+            if !self.am_choked && self.am_interested {
+                self.last_request.send(&mut stream)?;
+                //let _ = log_handle.log(&format!("> {:?}", self.last_request));
+            }
         }
+        Ok(stream)
     }
 
     pub fn download(
         &mut self,
-        piece: TorrentPiece,
-        connection: Option<TcpStream>,
-        total_pieces: usize,
-        download: DownloadInfo,
-        downloaded_mutex: DownloadedPieces,
-    ) -> Result<(TcpStream, Vec<u8>), ProtocolError> {
-        let mut cur_request = Request::new(piece.get_index() as u32, 0, BLOCK_SIZE);
+        piece: &mut Piece,
+        torrent: &Torrent,
+        client_id: [u8; 20],
+        log_handle: &LogHandle,
+    ) -> Result<(), ProtocolError> {
+        self.last_request = piece.request_next_block();
 
-        match connection {
-            Some(mut stream) => {
-                cur_request
-                    .send(&mut stream)
-                    .map_err(|err| ProtocolError::Connection(err.to_string()))?;
-                self.download_messages_loop(stream, cur_request, piece, downloaded_mutex)
+        let mut stream = match self.connection.take() {
+            None => self.open_connection(client_id, torrent, log_handle.clone())?,
+            Some(stream) => self.reuse_connection(stream, piece.index(), log_handle.clone())?,
+        };
+
+        match self.handle_messages(&mut stream, piece, torrent.downloaded(), log_handle) {
+            Ok(()) => {
+                self.connection = Some(stream);
+                Ok(())
             }
-            None => {
-                let stream = self.connect(download)?;
-                self.bitfield = vec![0; total_pieces];
-                self.download_messages_loop(stream, cur_request, piece, downloaded_mutex)
+            Err(ProtocolError::Piece(e)) => {
+                self.connection = Some(stream);
+                Err(ProtocolError::Piece(e))
             }
+            Err(ProtocolError::Peer(e)) => Err(ProtocolError::Peer(e)),
         }
     }
 
-    fn download_messages_loop(
+    fn handle_messages(
         &mut self,
-        mut stream: TcpStream,
-        mut cur_request: Request,
-        piece: TorrentPiece,
+        stream: &mut TcpStream,
+        piece: &mut Piece,
         downloaded_mutex: DownloadedPieces,
-    ) -> Result<(TcpStream, Vec<u8>), ProtocolError> {
-        let mut downloaded = Vec::<u8>::with_capacity(piece.get_length());
+        log_handle: &LogHandle,
+    ) -> Result<(), ProtocolError> {
         loop {
-            let len = read_len(&mut stream)?;
-            if len == 0 {
-                continue;
-            }
-
-            let bytes_read = read_id_and_payload(&mut stream, len)?;
-            let message = message_parser::parse(bytes_read).map_err(ProtocolError::Piece)?;
+            let message_bytes = peer_protocol::read_message_bytes(stream)?;
+            let message = PeerMessage::from(message_bytes)?;
+            //let _ = log_handle.log(&format!("< {message:?}"));
 
             match message {
-                PeerMessage::Bitfield(msg) => {
-                    self.bitfield = handle_bitfield(
-                        &mut stream,
-                        msg.get_bits(),
-                        piece.get_index(),
-                        &mut self.am_interested,
-                    )?;
+                PeerMessage::Choke => {
+                    peer_protocol::handle_choke(&mut self.last_request, &mut self.am_choked)
                 }
-                PeerMessage::Have(msg) => handle_have(
-                    &mut stream,
-                    msg,
+                PeerMessage::Unchoke => peer_protocol::handle_unchoke(
+                    stream,
+                    &mut self.last_request,
+                    &mut self.am_choked,
+                    self.am_interested,
+                    log_handle.clone(),
+                )?,
+                PeerMessage::Have(have) => peer_protocol::handle_have(
+                    stream,
+                    have,
                     &mut self.bitfield,
                     &mut self.am_interested,
                     downloaded_mutex.clone(),
+                    log_handle.clone(),
                 )?,
-                PeerMessage::Unchoke(_) => handle_unchoke(
-                    &mut stream,
-                    &mut cur_request,
-                    &mut self.am_choked,
-                    self.am_interested,
-                )?,
-                PeerMessage::Choke(_) => handle_choke(&mut cur_request, &mut self.am_choked),
-                PeerMessage::Piece(msg) => {
-                    let bytes_downloaded = handle_piece(
-                        &mut stream,
-                        msg,
-                        &mut downloaded,
-                        piece,
-                        &mut cur_request,
-                        self.am_choked,
+                PeerMessage::Bitfield(bitfield) => {
+                    self.bitfield = bitfield;
+                    peer_protocol::handle_bitfield(
+                        stream,
+                        &mut self.bitfield,
+                        piece.index(),
+                        &mut self.am_interested,
+                        log_handle.clone(),
                     )?;
-                    if bytes_downloaded == piece.get_length() {
+                }
+                PeerMessage::Block(block) => {
+                    peer_protocol::handle_block(
+                        stream,
+                        block,
+                        piece,
+                        &mut self.last_request,
+                        self.am_choked,
+                        log_handle.clone(),
+                    )?;
+
+                    if piece.is_full() {
                         break;
                     }
                 }
-                PeerMessage::Cancel(msg) => {
+                PeerMessage::Cancel(cancel) => {
                     return Err(ProtocolError::Piece(format!(
-                        "canceled piece {} beginning at {} request",
-                        msg.get_index(),
-                        msg.get_begin()
+                        "Canceled request of piece {} beginning at {}",
+                        cancel.index(),
+                        cancel.begin()
                     )))
                 }
-                _ => {}
+                _ => continue,
             }
         }
-        Ok((stream, downloaded))
+        Ok(())
     }
 
     pub fn is_interested(&self) -> bool {
@@ -176,7 +266,7 @@ impl Peer {
         self.is_choked
     }
 
-    pub fn set_unchoked(&mut self) {
+    pub fn unchoke(&mut self) {
         self.is_choked = false
     }
 }

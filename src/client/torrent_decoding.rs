@@ -6,10 +6,10 @@ use super::{
     single_file::SingleFile,
     torrent::Torrent,
 };
-use crate::client::torrent_piece::TorrentPiece;
-use std::{collections::HashMap, vec};
+use crate::client::piece::Piece;
+use std::{array::TryFromSliceError, collections::HashMap, vec};
 
-pub fn torrent_from_bytes(bytes: Vec<u8>) -> Result<Torrent, String> {
+pub fn from_bytes(bytes: Vec<u8>) -> Result<Torrent, String> {
     let file = match BDecoder::bdecode(bytes.clone())? {
         BType::Dictionary(file) => file,
         _ => return Err("decoded file is not a bencoded dictionary".to_string()),
@@ -38,7 +38,6 @@ pub fn torrent_from_bytes(bytes: Vec<u8>) -> Result<Torrent, String> {
     Torrent::new(
         utils::remove_extension(&name),
         announce,
-        //piece_length,
         pieces,
         files,
         get_info_hash(bytes)?,
@@ -65,20 +64,20 @@ fn get_integer_from(dict: &HashMap<String, BType>, key: &str) -> Result<i64, Str
 }
 
 /// Checks if the pieces key bytes are multiple of 20.
-fn torrent_pieces_list(pieces: &[u8], piece_length: usize) -> Result<Vec<TorrentPiece>, String> {
+fn torrent_pieces_list(pieces: &[u8], piece_length: usize) -> Result<Vec<Piece>, String> {
     if pieces.len() % 20 != 0 {
         return Err("pieces string is not a multiple of 20".to_string());
     }
 
     let mut final_pieces = Vec::with_capacity(pieces.len() / 20);
     for piece in pieces.chunks_exact(20).enumerate() {
-        final_pieces.push(TorrentPiece::new(
+        final_pieces.push(Piece::new(
             piece.0,
             piece_length,
             piece
                 .1
                 .try_into()
-                .map_err(|_| "conversion error".to_string())?,
+                .map_err(|e: TryFromSliceError| e.to_string())?,
         ));
     }
     Ok(final_pieces)
@@ -159,33 +158,31 @@ mod tests {
 
     #[test]
     fn test_single_file_torrent() -> Result<(), String> {
-        let file_bytes = fs::read("tests/sample.torrent").map_err(|err| err.to_string())?;
+        let file_bytes = fs::read("tests/sample.torrent").map_err(|e| e.to_string())?;
 
-        let _expected_torrent = Torrent::new(
+        let expected_torrent = Torrent::new(
             "sample".to_string(),
             "udp://tracker.openbittorrent.com:80".to_string(),
-            //65536,
             torrent_pieces_list(&file_bytes[148..168].to_vec(), 65536)?,
             vec![SingleFile::new(20, "sample.txt".to_string())],
             [
                 0xd0, 0xd1, 0x4c, 0x92, 0x6e, 0x6e, 0x99, 0x76, 0x1a, 0x2f, 0xdc, 0xff, 0x27, 0xb4,
                 0x03, 0xd9, 0x63, 0x76, 0xef, 0xf6,
             ],
-        );
+        )?;
 
-        let _torrent = torrent_from_bytes(file_bytes)?;
-        //assert_eq!(expected_torrent, torrent);
+        let torrent = from_bytes(file_bytes)?;
+        assert_eq!(expected_torrent, torrent);
         Ok(())
     }
 
     #[test]
     fn test_multiple_file_torrent() -> Result<(), String> {
-        let file_bytes = fs::read("tests/bla.torrent").map_err(|err| err.to_string())?;
+        let file_bytes = fs::read("tests/bla.torrent").map_err(|e| e.to_string())?;
 
-        let _expected_torrent = Torrent::new(
+        let expected_torrent = Torrent::new(
             "bla".to_string(),
             "udp://tracker.opentrackr.org:1337/announce".to_string(),
-            //16384,
             torrent_pieces_list(&file_bytes[392..412].to_vec(), 16384)?,
             vec![
                 SingleFile::new(8, "bla/sub_bla/a.txt".to_string()),
@@ -197,10 +194,10 @@ mod tests {
                 0x89, 0xae, 0x9d, 0x0b, 0xe3, 0x7b, 0xed, 0xbc, 0x97, 0x66, 0xee, 0x85, 0x11, 0x91,
                 0x16, 0xe9, 0x4f, 0x40, 0xc8, 0xe5,
             ],
-        );
+        )?;
 
-        let _torrent = torrent_from_bytes(file_bytes)?;
-        //assert_eq!(expected_torrent, torrent);
+        let torrent = from_bytes(file_bytes)?;
+        assert_eq!(expected_torrent, torrent);
         Ok(())
     }
 }

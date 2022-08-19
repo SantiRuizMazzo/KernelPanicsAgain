@@ -25,15 +25,15 @@ pub enum BType {
 }
 
 impl BDecoder {
-    fn new(bytes: Vec<u8>) -> BDecoder {
-        BDecoder {
+    fn new(bytes: Vec<u8>) -> Self {
+        Self {
             bytes,
             pos: 0_usize,
         }
     }
 
     pub fn bdecode(bytes: Vec<u8>) -> Result<BType, String> {
-        let mut bdecoder = BDecoder::new(bytes);
+        let mut bdecoder = Self::new(bytes);
         let btype_structure = bdecoder.decode_next()?;
         if !bdecoder.eof() {
             return Err("missing tailing character".to_string());
@@ -68,7 +68,7 @@ impl BDecoder {
                 if self.is_invalid_int(&int_as_string) {
                     return Err("invalid integer".to_string());
                 }
-                int_as_string.parse::<i64>().map_err(|err| err.to_string())
+                int_as_string.parse::<i64>().map_err(|e| e.to_string())
             }
             None => Err("number delimiter not found".to_string()),
         }

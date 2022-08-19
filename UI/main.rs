@@ -1,16 +1,12 @@
 pub mod main_window;
 
-use std::borrow::Borrow;
-use std::sync::mpsc;
-use std::thread;
-
 use chrono::Local;
 use gtk::{prelude::*, ApplicationWindow, Builder};
-use patk_bittorrent_client::logger::torrent_logger::{LogMessage, Logger};
-use patk_bittorrent_client::utils;
 use patk_bittorrent_client::{
-    client::client_side::ClientSide, config::Config, server::server_side::ServerSide,
+    client::client_side::ClientSide, config::Config, logging::logger::Logger,
+    server::server_side::ServerSide, utils,
 };
+use std::{borrow::Borrow, sync::mpsc, thread};
 
 fn build_main_window(application: &gtk::Application, builder: Builder) -> ApplicationWindow {
     let window: ApplicationWindow = builder.object("main_window").expect("problema");
@@ -140,7 +136,7 @@ fn build_ui(application: &gtk::Application, sender: mpsc::Sender<String>) -> App
 fn start_client_worker(receiver: mpsc::Receiver<String>, mut client: ClientSide) {
     let _ = thread::spawn(move || loop {
         if let Ok(user_input) = receiver.recv() {
-            let torrent_path = vec![user_input].into_iter();
+            let torrent_path = vec![user_input];
             let _ = client.load_torrents(torrent_path);
         };
     });
@@ -155,16 +151,15 @@ fn main() -> Result<(), String> {
         Default::default(),
     );
 
-    let (notif_tx, notif_rx) = mpsc::channel();
     let config = Config::new()?;
-    let logger = Logger::new(config.clone())?;
+    let logger = Logger::new(config.log_path())?;
 
-    let mut client = ClientSide::new(config.clone(), notif_tx.clone())?;
-    let mut server = ServerSide::new(config, logger.get_sender());
+    let mut client = ClientSide::new(&config, logger.handle());
+    let mut server = ServerSide::new(client.get_id(), &config, logger.handle());
 
-    server.set_peer_id(client.get_id());
-    server.init(notif_tx, notif_rx)?;
-    client.init(logger.get_sender())?;
+    let (notif_tx, notif_rx) = mpsc::channel();
+    server.init(notif_tx.clone(), notif_rx)?;
+    client.init(notif_tx)?;
 
     let log_peer_id = format!(
         "Client Peer ID: {}",
@@ -178,10 +173,7 @@ fn main() -> Result<(), String> {
         let window = build_ui(app, path_tx.clone());
         window.show();
     });
-    logger
-        .get_sender()
-        .send(LogMessage::Log(log_peer_id))
-        .map_err(|err| err.to_string())?;
+    logger.handle().log(&log_peer_id)?;
     let code = application.run();
     std::process::exit(code)
 }

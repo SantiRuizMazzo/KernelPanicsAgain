@@ -8,7 +8,7 @@ use super::{
 };
 use std::collections::HashMap;
 
-pub fn tracker_info_from_bytes(bytes: Vec<u8>) -> Result<TrackerInfo, String> {
+pub fn from_bytes(bytes: Vec<u8>) -> Result<TrackerInfo, String> {
     let body = match BDecoder::bdecode(bytes)? {
         BType::Dictionary(body) => body,
         _ => return Err("tracker response body is not a bencoded dictionary".to_string()),
@@ -74,9 +74,9 @@ fn failure_message(code: i64, description: &str) -> String {
 
 fn regular_peer_list(peers: &[BType]) -> Result<Vec<Peer>, String> {
     let mut peer_list = Vec::with_capacity(peers.len());
-    for (idx, peer) in peers.iter().enumerate() {
+    for peer in peers.iter() {
         match peer {
-            BType::Dictionary(peer_dict) => peer_list.push(peer_from_dict(peer_dict, idx)?),
+            BType::Dictionary(peer_dict) => peer_list.push(peer_from_dict(peer_dict)?),
             _ => return Err("some peer of the list is not a bencoded dictionary".to_string()),
         }
     }
@@ -87,7 +87,7 @@ fn regular_peer_list(peers: &[BType]) -> Result<Vec<Peer>, String> {
     Ok(peer_list)
 }
 
-fn peer_from_dict(peer_dict: &HashMap<String, BType>, index: usize) -> Result<Peer, String> {
+fn peer_from_dict(peer_dict: &HashMap<String, BType>) -> Result<Peer, String> {
     let id = match peer_dict.get("peer id") {
         Some(BType::String(id)) => peer_id_from_bytes(id),
         _ => None,
@@ -99,11 +99,11 @@ fn peer_from_dict(peer_dict: &HashMap<String, BType>, index: usize) -> Result<Pe
     };
 
     let port = match peer_dict.get("port") {
-        Some(BType::Integer(port)) => *port as u32,
+        Some(BType::Integer(port)) => *port as u16,
         _ => return Err("port key not present in peer dictionary".to_string()),
     };
 
-    Ok(Peer::new(id, ip, port, index))
+    Ok(Peer::new(id, ip, port))
 }
 
 fn peer_id_from_bytes(peer_id: &[u8]) -> Option<[u8; 20]> {
@@ -115,10 +115,10 @@ fn peer_id_from_bytes(peer_id: &[u8]) -> Option<[u8; 20]> {
 
 fn compact_peer_list(peers: &[u8]) -> Result<Vec<Peer>, String> {
     let mut peer_list = Vec::with_capacity(peers.len() / 6);
-    for (idx, peer) in peers.chunks_exact(6).enumerate() {
+    for peer in peers.chunks_exact(6) {
         let ip = format!("{}.{}.{}.{}", peer[0], peer[1], peer[2], peer[3]);
-        let port = u32::from_be_bytes([0, 0, peer[4], peer[5]]);
-        peer_list.push(Peer::new(None, ip, port, idx));
+        let port = u16::from_be_bytes([peer[4], peer[5]]);
+        peer_list.push(Peer::new(None, ip, port));
     }
     if peer_list.is_empty() {
         return Err("could not load any peers to the peers list".to_string());

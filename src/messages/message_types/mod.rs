@@ -1,10 +1,8 @@
 pub mod bitfield;
+pub mod block;
 pub mod cancel;
-pub mod choke;
 pub mod handshake;
 pub mod have;
 pub mod interested;
-pub mod not_interested;
-pub mod piece;
 pub mod request;
 pub mod unchoke;

@@ -1,11 +1,9 @@
 mod bdecoding;
 pub mod client;
-
 pub mod config;
-pub mod logger;
-
+pub mod logging;
 mod messages;
 pub mod server;
 pub mod torrent_client;
-mod urlencoding;
+mod url_encoding;
 pub mod utils;

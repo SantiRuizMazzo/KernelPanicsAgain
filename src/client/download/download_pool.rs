@@ -1,25 +1,26 @@
-use super::{
-    download_worker::{DownloadMessage, DownloadWorker},
-    peer::Peer,
-};
+use super::{download_worker::DownloadWorker, peer::Peer};
 use crate::{
     client::client_side::{DownloadedTorrents, TorrentReceiver, TorrentSender},
-    client::torrent_piece::TorrentPiece,
+    client::piece::Piece,
     config::Config,
-    logger::torrent_logger::LogMessage,
-    server::server_side::ServerNotification,
+    logging::log_handle::LogHandle,
+    server::server_side::Notification,
 };
 use std::sync::{
-    mpsc::{self, Receiver, Sender},
+    mpsc::{Receiver, Sender},
     Arc, Mutex,
 };
+
+pub enum DownloadMessage {
+    Piece(Piece),
+    Kill,
+}
 
 pub type PeerSender = Sender<Peer>;
 pub type PeerReceiver = Arc<Mutex<Receiver<Peer>>>;
 pub type PieceSender = Sender<DownloadMessage>;
 pub type PieceReceiver = Arc<Mutex<Receiver<DownloadMessage>>>;
-pub type DownloadedPieces = Arc<Mutex<Vec<TorrentPiece>>>;
-pub type PeerBlacklist = Arc<Mutex<Vec<Peer>>>;
+pub type DownloadedPieces = Arc<Mutex<Vec<Piece>>>;
 
 pub struct DownloadPool {
     workers: Vec<DownloadWorker>,
@@ -27,57 +28,36 @@ pub struct DownloadPool {
 
 impl DownloadPool {
     pub fn new(
-        torrent_queue: (TorrentSender, TorrentReceiver),
-        downloaded_torrents: DownloadedTorrents,
-        logger_tx: Sender<LogMessage>,
         client_id: [u8; 20],
         config: &Config,
-        notification_tx: Sender<ServerNotification>,
-    ) -> DownloadPool {
-        let mut workers = Vec::with_capacity(config.get_max_download_connections());
+        torrent_tx: &TorrentSender,
+        torrent_rx_mutex: &TorrentReceiver,
+        downloaded_torrents: &DownloadedTorrents,
+        notif_tx: Sender<Notification>,
+        log_handle: &LogHandle,
+    ) -> Self {
+        let mut workers = Vec::with_capacity(config.max_download_connections());
 
-        let _ = DownloadWorker::new(
-            // Worker creation to avoid clippy warning
-            0,
-            torrent_queue.clone(),
-            downloaded_torrents.clone(),
-            logger_tx.clone(),
-            client_id,
-            config,
-            notification_tx.clone(),
-        )
-        .get_thread();
-
-        for id in 0..workers.capacity() {
+        for _ in 0..workers.capacity() {
             workers.push(DownloadWorker::new(
-                id,
-                torrent_queue.clone(),
-                downloaded_torrents.clone(),
-                logger_tx.clone(),
                 client_id,
-                config,
-                notification_tx.clone(),
+                config.torrent_time_slice(),
+                torrent_tx.clone(),
+                torrent_rx_mutex.clone(),
+                downloaded_torrents.clone(),
+                notif_tx.clone(),
+                log_handle.clone(),
             ));
         }
 
-        DownloadPool { workers }
-    }
-
-    pub fn ids(&self) {
-        for x in &self.workers {
-            print!("{}", x.get_id())
-        }
+        Self { workers }
     }
 }
 
-pub fn setup_pieces_queue(pieces: &[TorrentPiece]) -> Result<(PieceSender, PieceReceiver), String> {
-    let (piece_tx, piece_rx) = mpsc::channel::<DownloadMessage>();
-    let piece_rx = Arc::new(Mutex::new(piece_rx));
-
-    for &piece in pieces {
-        piece_tx
-            .send(DownloadMessage::Piece(piece))
-            .map_err(|err| err.to_string())?;
+impl Drop for DownloadPool {
+    fn drop(&mut self) {
+        for worker in &mut self.workers {
+            let _ = worker.join();
+        }
     }
-    Ok((piece_tx, piece_rx))
 }

@@ -1,75 +1,78 @@
-use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader};
-use std::str::FromStr;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    str::FromStr,
+};
 
 #[derive(Clone)]
 pub struct Config {
     tcp_port: usize,
-    download_path: String,
     log_path: String,
-    max_download_connections: usize,
+    download_path: String,
     torrent_time_slice: usize,
+    max_download_connections: usize,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            tcp_port: 8081,
+            log_path: "log.txt".to_string(),
+            download_path: "downloads".to_string(),
+            torrent_time_slice: 10,
+            max_download_connections: 20,
+        }
+    }
 }
 
 impl Config {
-    pub fn new() -> Result<Config, String> {
-        let mut tcp_port = 8081;
-        let mut download_path = "downloads".to_string();
-        let mut log_path = "log.txt".to_string();
-        let mut max_download_connections = 20;
-        let mut torrent_time_slice = 10;
+    pub fn new() -> Result<Self, String> {
+        let file = File::open("config.txt").map_err(|e| e.to_string())?;
+        let mut config = Self::default();
 
-        if let Ok(file) = OpenOptions::new().read(true).open("config.txt") {
-            for line in BufReader::new(file).lines() {
-                let line = line.map_err(|err| err.to_string())?;
-                let value = Config::get_value(line.clone());
+        for line in BufReader::new(file).lines() {
+            let line = line.map_err(|e| e.to_string())?;
+            let value = Self::value_from_line(&line);
 
-                if line.contains("tcp_port") {
-                    tcp_port = usize::from_str(&value).map_err(|err| err.to_string())?;
-                } else if line.contains("download_path") {
-                    download_path = value;
-                } else if line.contains("log_path") {
-                    log_path = value;
-                } else if line.contains("max_download_connections") {
-                    max_download_connections =
-                        usize::from_str(&value).map_err(|err| err.to_string())?;
-                } else if line.contains("torrent_time_slice") {
-                    torrent_time_slice = usize::from_str(&value).map_err(|err| err.to_string())?;
-                }
+            if line.starts_with("tcp_port") {
+                config.tcp_port = usize::from_str(&value).map_err(|e| e.to_string())?;
+            } else if line.starts_with("log_path") {
+                config.log_path = value;
+            } else if line.starts_with("download_path") {
+                config.download_path = value;
+            } else if line.starts_with("torrent_time_slice") {
+                config.torrent_time_slice = usize::from_str(&value).map_err(|e| e.to_string())?;
+            } else if line.starts_with("max_download_connections") {
+                config.max_download_connections =
+                    usize::from_str(&value).map_err(|e| e.to_string())?;
             }
-        };
+        }
 
-        Ok(Config {
-            tcp_port,
-            download_path,
-            log_path,
-            max_download_connections,
-            torrent_time_slice,
-        })
+        Ok(config)
     }
 
-    pub fn get_download_path(&self) -> String {
+    pub fn download_path(&self) -> String {
         self.download_path.clone()
     }
 
-    pub fn get_log_path(&self) -> String {
+    pub fn log_path(&self) -> String {
         self.log_path.clone()
     }
 
-    pub fn get_max_download_connections(&self) -> usize {
+    pub fn max_download_connections(&self) -> usize {
         self.max_download_connections
     }
 
-    pub fn get_torrent_time_slice(&self) -> usize {
+    pub fn torrent_time_slice(&self) -> usize {
         self.torrent_time_slice
     }
 
-    fn get_value(line: String) -> String {
-        let line: Vec<&str> = line.rsplit('=').collect();
-        line[0].to_string()
+    fn value_from_line(line: &str) -> String {
+        let split_line: Vec<&str> = line.rsplit('=').collect();
+        split_line[0].to_string()
     }
 
-    pub fn get_server_address(&self) -> String {
+    pub fn server_address(&self) -> String {
         format!("localhost:{}", self.tcp_port)
     }
 }

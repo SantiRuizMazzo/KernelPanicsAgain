@@ -23,11 +23,11 @@ pub struct TrackerInfo {
 }
 
 impl TrackerInfo {
-    pub fn new(interval: u32, peers: Vec<Peer>) -> TrackerInfo {
-        TrackerInfo { interval, peers }
+    pub fn new(interval: u32, peers: Vec<Peer>) -> Self {
+        Self { interval, peers }
     }
 
-    pub fn get_peers(&self) -> Vec<Peer> {
+    pub fn peers_list(&self) -> Vec<Peer> {
         self.peers.clone()
     }
 }
