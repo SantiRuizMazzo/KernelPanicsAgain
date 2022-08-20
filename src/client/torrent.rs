@@ -19,7 +19,7 @@ use std::{
     sync::{
         mpsc::{self, Sender},
         Arc, Mutex,
-    },
+    }, time::Instant,
 };
 
 use super::{
@@ -29,7 +29,7 @@ use super::{
             DownloadMessage, DownloadedPieces, PeerReceiver, PeerSender, PieceReceiver, PieceSender,
         },
         peer::Peer,
-        peer_protocol::ProtocolError,
+        peer_protocol::ProtocolError, download_worker_state::DownloadWorkerState,
     },
 };
 
@@ -112,6 +112,10 @@ impl Torrent {
         })
     }
 
+    pub fn get_total_size(&self) -> usize {
+        self.files.iter().map(|f| f.length).sum::<i64>() as usize
+    }
+
     fn setup_pieces_queue(pieces: Vec<Piece>) -> Result<(PieceSender, PieceReceiver), String> {
         let (piece_tx, piece_rx) = mpsc::channel::<DownloadMessage>();
         let pieces_queue = (piece_tx, Arc::new(Mutex::new(piece_rx)));
@@ -130,7 +134,6 @@ impl Torrent {
         let peer_rx = Arc::new(Mutex::new(peer_rx));
         (peer_tx, peer_rx)
     }
-
     /// Attempts to decode a .torrent file located at `path`, and build a `Torrent` struct with its data (if possible).
     pub fn from<P>(path: P) -> Result<Self, String>
     where
@@ -329,6 +332,8 @@ impl Torrent {
         downloaded_torrents_mutex: DownloadedTorrents,
         notif_tx: Sender<Notification>,
         log_handle: &LogHandle,
+        download_worker_id: usize,
+        client_port: u32
     ) -> Result<(), String> {
         let (mut have_piece, mut have_peer) = (None, None);
         let mut download_counter = 0;
@@ -340,15 +345,17 @@ impl Torrent {
 
             let mut piece = self.get_new_piece(have_piece.take())?;
             let mut peer = self.get_new_peer(have_peer.take())?;
-
             let downloaded = self.downloaded.lock().map_err(|e| e.to_string())?;
             if (self.total_pieces - downloaded.len()) <= 20 {
                 self.discard_piece(piece.clone())?
             }
             drop(downloaded);
 
+            /* */
+
             match peer.download(&mut piece, self, client_id, log_handle) {
                 Ok(()) => {
+                    let last_download_time = Instant::now();
                     let final_path = format!("{}/.tmp/{}", self.download_path, piece.index());
                     if Path::new(&final_path).is_file() {
                         continue;
@@ -358,7 +365,32 @@ impl Torrent {
                     self.notify_piece(piece.clone(), notif_tx.clone())?;
                     self.update_status(piece, log_handle.clone())?;
                     download_counter += 1;
-                    have_peer = Some(peer);
+                    have_peer = Some(peer.clone());
+                    let downloaded_pieces = self.downloaded.lock().map_err(|e| e.to_string())?;
+                    let current_pieces = downloaded_pieces.len();
+                    println!("{}", current_pieces);
+                    let tracker_info = self.request_tracker_info(client_id.clone(), client_port.clone())?;
+                    let mut new_state = DownloadWorkerState::new(
+                        download_worker_id.clone(),
+                        self.info_hash.clone(),
+                        peer.id().clone(),
+                        peer.ip(),
+                        peer.port(),
+                        self.name.clone(),
+                        self.total_pieces.clone(),
+                        Some(last_download_time.clone()),
+                        tracker_info.peers_list().len()
+                    );
+                    new_state.total_size = self.get_total_size();
+                    new_state.set_am_interested(peer.am_interested());
+                    new_state.set_am_choked(peer.am_choked());
+                    new_state.set_downloaded_pieces(current_pieces.clone());
+                    new_state.set_is_interested(peer.is_interested());
+                    new_state.set_is_choked(peer.is_choked());
+
+                    notif_tx
+                        .send(Notification::UpdateUi(new_state))
+                        .map_err(|err| err.to_string())?;
                 }
                 Err(ProtocolError::Piece(_)) => {
                     //let _ = log_handle.log(&format!("Changing piece {} -> {e}", piece.index()));

@@ -1,6 +1,6 @@
 use crate::{
     client::client_side::{DownloadedTorrents, TorrentReceiver, TorrentSender},
-    logging::log_handle::LogHandle,
+    logging::log_handle::{LogHandle},
     server::server_side::Notification,
 };
 use std::{
@@ -14,6 +14,7 @@ pub struct DownloadWorker {
 
 impl DownloadWorker {
     pub fn new(
+        id: usize,
         client_id: [u8; 20],
         pieces_to_download: usize,
         torrent_tx: TorrentSender,
@@ -21,6 +22,7 @@ impl DownloadWorker {
         downloaded_torrents_mutex: DownloadedTorrents,
         notif_tx: Sender<Notification>,
         log_handle: LogHandle,
+        client_port: u32,
     ) -> Self {
         let thread = Some(thread::spawn(move || {
             //Fix: loop never ends, must implement a way to kill download workers
@@ -51,6 +53,8 @@ impl DownloadWorker {
                     downloaded_torrents_mutex.clone(),
                     notif_tx.clone(),
                     &log_handle,
+                    id,
+                    client_port.clone(),
                 )?;
             }
         }));

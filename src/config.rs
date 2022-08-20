@@ -59,7 +59,11 @@ impl Config {
         self.log_path.clone()
     }
 
-    pub fn max_download_connections(&self) -> usize {
+    pub fn get_tcp_port(&self) -> usize {
+        self.tcp_port.clone()
+    }
+
+    pub fn get_max_download_connections(&self) -> usize {
         self.max_download_connections
     }
 

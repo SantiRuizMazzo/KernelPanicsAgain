@@ -97,10 +97,10 @@ impl ClientSide {
         Ok(())
     }
 
-    pub fn init(&mut self, notif_tx: Sender<Notification>) -> Result<(), String> {
+    pub fn init(&mut self, notif_tx: Sender<Notification>) -> Result<DownloadPool, String> {
         self.load_torrents(env::args())?;
 
-        DownloadPool::new(
+        Ok(DownloadPool::new(
             self.id,
             &self.config,
             &self.torrent_tx,
@@ -108,8 +108,7 @@ impl ClientSide {
             &self.downloaded_torrents,
             notif_tx,
             &self.log_handle,
-        );
-        Ok(())
+        ))
     }
 }
 

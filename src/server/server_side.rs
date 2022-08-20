@@ -1,12 +1,18 @@
-use crate::{client::piece::Piece, config::Config, logging::log_handle::LogHandle};
+use crate::{
+    client::{download::download_worker_state::DownloadWorkerState, piece::Piece},
+    config::Config,
+    logging::log_handle::LogHandle,
+    ui_notification_structs::{peer_state::PeerState, ui_notification::UiNotification},
+};
 use std::{
     net::{TcpListener, TcpStream},
     sync::{
         mpsc::Receiver,
         mpsc::{SendError, Sender},
     },
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle}, collections::HashMap,
 };
+use gtk::glib::Sender as UiSender;
 
 use super::upload::{upload_info::UploadInfo, upload_pool::UploadPool};
 
@@ -15,6 +21,7 @@ pub enum Notification {
     NewPiece(Piece, UploadInfo),
     NewPeer(TcpStream),
     EndPeer(usize),
+    UpdateUi(DownloadWorkerState),
     EndServer,
 }
 
@@ -22,6 +29,7 @@ pub struct ServerSide {
     id: [u8; 20],
     config: Config,
     log_handle: LogHandle,
+    ui_sender: Option<UiSender<UiNotification>>,
 }
 
 impl ServerSide {
@@ -30,7 +38,13 @@ impl ServerSide {
             id,
             config: config.clone(),
             log_handle,
+            ui_sender: None,
         }
+
+    }
+
+    pub fn set_ui_sender(&mut self, sender: Option<UiSender<UiNotification>>) {
+        self.ui_sender = sender
     }
 
     pub fn init(
@@ -51,6 +65,9 @@ impl ServerSide {
     ) -> Result<JoinHandle<Result<(), String>>, String> {
         let log_handle = self.log_handle.clone();
         let mut pool = UploadPool::new(self.id);
+        let mut hash_states: HashMap<usize, DownloadWorkerState> =
+                HashMap::<usize, DownloadWorkerState>::new();
+        let ui_option = self.ui_sender.clone();
 
         let thread: JoinHandle<Result<(), String>> = thread::spawn(move || {
             for notification in notif_rx {
@@ -69,6 +86,18 @@ impl ServerSide {
                         log_handle.log(&format!("Removing worker {id}"))?;
                     }
                     Notification::EndServer => break,
+                    Notification::UpdateUi(sendable) => {
+                        if ui_option.is_some() {
+                            hash_states.insert(sendable.id, sendable);
+                            let ui_notif =
+                                ServerSide::generate_ui_notification(hash_states.clone());
+                            let clone_ui_option = ui_option.clone();
+                            let _ = match clone_ui_option {
+                                Some(sender) => sender.send(ui_notif),
+                                None => Ok(()),
+                            };
+                        }
+                    },
                 }
             }
             Ok(())
@@ -90,5 +119,42 @@ impl ServerSide {
             Ok(())
         });
         Ok(thread)
+    }
+
+    pub fn set_peer_id(&mut self, peer_id: [u8; 20]) {
+        self.id = peer_id;
+    }
+    pub fn get_different_peers(hash_map: HashMap<usize, DownloadWorkerState>) -> usize {
+        let mut hash_count = HashMap::<[u8; 20], bool>::new();
+
+        for download_worker_state in hash_map {
+            if let Some(peer_id) = download_worker_state.1.curr_peer_id {
+                hash_count.insert(peer_id, true);
+            }
+        }
+        hash_count.len()
+    }
+    pub fn generate_ui_notification(
+        hash_to_send: HashMap<usize, DownloadWorkerState>,
+    ) -> UiNotification {
+        let mut ui_notif = UiNotification::new();
+        for download_worker_state in hash_to_send.iter() {
+            let different_peers = ServerSide::get_different_peers(hash_to_send.clone());
+            let peer_states = ServerSide::get_peer_states_vec(hash_to_send.clone());
+            let torrent_state = download_worker_state
+                .1
+                .generate_torrent_state(different_peers, peer_states);
+            ui_notif.add_torrent_state(torrent_state);
+        }
+        ui_notif
+    }
+    pub fn get_peer_states_vec(
+        hash_to_send: HashMap<usize, DownloadWorkerState>,
+    ) -> Vec<PeerState> {
+        let mut res = Vec::<PeerState>::new();
+        for (_id, state) in hash_to_send {
+            res.push(state.generate_peer_state());
+        }
+        res
     }
 }

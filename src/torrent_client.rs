@@ -20,5 +20,7 @@ pub fn run() -> Result<(), String> {
 
     let (notif_tx, notif_rx) = mpsc::channel();
     server.init(notif_tx.clone(), notif_rx)?;
-    client.init(notif_tx)
+    let mut download_pool = client.init(notif_tx)?;
+    download_pool.wait_for_workers();
+    Ok(())
 }

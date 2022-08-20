@@ -269,4 +269,11 @@ impl Peer {
     pub fn unchoke(&mut self) {
         self.is_choked = false
     }
+
+    pub fn am_interested(&self) -> bool {
+        self.am_interested
+    }
+    pub fn am_choked(&self) -> bool {
+        self.am_choked
+    }
 }

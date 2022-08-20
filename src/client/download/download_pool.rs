@@ -36,10 +36,11 @@ impl DownloadPool {
         notif_tx: Sender<Notification>,
         log_handle: &LogHandle,
     ) -> Self {
-        let mut workers = Vec::with_capacity(config.max_download_connections());
+        let mut workers = Vec::with_capacity(config.get_max_download_connections());
 
-        for _ in 0..workers.capacity() {
+        for id in 0..workers.capacity() {
             workers.push(DownloadWorker::new(
+                id,
                 client_id,
                 config.torrent_time_slice(),
                 torrent_tx.clone(),
@@ -47,17 +48,21 @@ impl DownloadPool {
                 downloaded_torrents.clone(),
                 notif_tx.clone(),
                 log_handle.clone(),
+                config.get_tcp_port() as u32,
             ));
         }
 
         Self { workers }
     }
+    pub fn wait_for_workers(&mut self) {
+        for worker in &mut self.workers {
+            let _ = worker.join();
+        }
+    }
 }
 
 impl Drop for DownloadPool {
     fn drop(&mut self) {
-        for worker in &mut self.workers {
-            let _ = worker.join();
-        }
+        self.wait_for_workers()
     }
 }
