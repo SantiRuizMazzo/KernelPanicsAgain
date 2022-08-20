@@ -368,7 +368,9 @@ impl Torrent {
                     have_peer = Some(peer.clone());
                     let downloaded_pieces = self.downloaded.lock().map_err(|e| e.to_string())?;
                     let current_pieces = downloaded_pieces.len();
-                    println!("{}", current_pieces);
+
+                    drop(downloaded_pieces);
+
                     let tracker_info = self.request_tracker_info(client_id.clone(), client_port.clone())?;
                     let mut new_state = DownloadWorkerState::new(
                         download_worker_id.clone(),
