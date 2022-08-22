@@ -325,7 +325,7 @@ fn make_row_label(name: &str) -> gtk::Label {
 
 fn update_general_information_shown(
     info_grid: gtk::Grid,
-    metadata: patk_bittorrent_client::ui_notification_structs::metadata::Metadata,
+    torrent_state: patk_bittorrent_client::ui_notification_structs::torrent_state::TorrentState,
     n_peers: usize,
     active_peers: usize,
 ) -> Result<(), gtk::Widget> {
@@ -335,17 +335,17 @@ fn update_general_information_shown(
             let label = child.dynamic_cast::<gtk::Label>()?;
             let label_name = label.widget_name().to_string();
             if label_name == "name" {
-                label.set_text(metadata.get_name().borrow());
+                label.set_text(torrent_state.get_metadata_name().borrow());
             } else if label_name == "hash" {
-                label.set_text((format!("{:x?}", metadata.get_info_hash())).borrow());
+                label.set_text((format!("{:x?}", torrent_state.get_metadata_info_hash())).borrow());
             } else if label_name == "total_size" {
-                label.set_text(metadata.get_total_size().to_string().borrow());
+                label.set_text(torrent_state.get_metadata_total_size().to_string().borrow());
             } else if label_name == "total_pieces" {
-                label.set_text(metadata.get_n_pieces().to_string().borrow());
+                label.set_text(torrent_state.get_metadata_n_pieces().to_string().borrow());
             } else if label_name == "peers" {
                 label.set_text(n_peers.to_string().borrow());
             } else if label_name == "structure" {
-                if metadata.get_is_single() {
+                if torrent_state.get_metadata_is_single() {
                     label.set_text("Single File");
                 } else {
                     label.set_text("Multiple File");
@@ -354,12 +354,12 @@ fn update_general_information_shown(
                 label.set_text(
                     (format!(
                         "{:x?}%",
-                        ((metadata.get_downloaded() * 100) as f64) / (metadata.get_n_pieces() as f64)
+                        ((torrent_state.get_metadata_downloaded() * 100) as f64) / (torrent_state.get_metadata_n_pieces() as f64)
                     ))
                     .borrow(),
                 );
             } else if label_name == "downloaded_pieces" {
-                label.set_text(metadata.get_downloaded().to_string().borrow());
+                label.set_text(&torrent_state.get_metadata_downloaded().to_string());
             } else if label_name == "active_connections" {
                 label.set_text(active_peers.to_string().borrow());
             }
@@ -434,7 +434,7 @@ fn set_up_info_window(torrent_name: &str){
     let info_grid = get_general_info_grid();
     let torrent_state = get_torrent_from_hash_by_name(torrent_name.clone());
     update_statistics_shown(statistics_grid, torrent_state.get_peers(), torrent_state.get_metadata_total_size()/torrent_state.get_metadata_n_pieces());
-    let _ = update_general_information_shown(info_grid, torrent_state.get_metadata(), torrent_state.get_total_peers(),torrent_state.get_peers().len());
+    let _ = update_general_information_shown(info_grid, torrent_state.clone(), torrent_state.get_total_peers(),torrent_state.get_peers().len());
 }
 
 fn make_row_button(torrent: &str) -> gtk::Button {

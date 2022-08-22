@@ -23,7 +23,7 @@ impl TorrentState {
         self.metadata.set_info_hash(_info_hash);
     }
 
-    pub fn get_metadata_info_hash(&mut self) -> [u8; 20] {
+    pub fn get_metadata_info_hash(&self) -> [u8; 20] {
         self.metadata.get_info_hash()
     }
 
@@ -47,7 +47,7 @@ impl TorrentState {
         self.metadata.set_is_single(_is_single);
     }
 
-    pub fn get_metadata_is_single(&mut self) -> bool {
+    pub fn get_metadata_is_single(&self) -> bool {
         self.metadata.get_is_single()
     }
 
@@ -63,7 +63,7 @@ impl TorrentState {
         self.metadata.set_connections(_conections as u32);
     }
 
-    pub fn get_metadata_connections(&mut self) -> u32 {
+    pub fn get_metadata_connections(&self) -> u32 {
         self.metadata.get_connections()
     }
 
@@ -88,7 +88,7 @@ impl TorrentState {
     }
 
     pub fn get_completion_precentage(&self) -> f64 {
-        ((self.get_metadata_downloaded() as f64)/(self.get_metadata_n_pieces() as f64)) * 100.0
+        ((self.get_metadata_downloadede() as f64)/(self.get_metadata_n_pieces() as f64)) * 100.0
     }
 }
 

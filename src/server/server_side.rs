@@ -4,6 +4,7 @@ use crate::{
     logging::log_handle::LogHandle,
     ui_notification_structs::{peer_state::PeerState, ui_notification::UiNotification},
 };
+use gtk::glib::Sender as UiSender;
 use std::{
     net::{TcpListener, TcpStream},
     sync::{
@@ -12,7 +13,6 @@ use std::{
     },
     thread::{self, JoinHandle}, collections::HashMap,
 };
-use gtk::glib::Sender as UiSender;
 
 use super::upload::{upload_info::UploadInfo, upload_pool::UploadPool};
 
