@@ -8,15 +8,6 @@ pub struct TorrentTrackerData {
     peers: HashMap<String, PeerTrackerInfo>,
 }
 
-impl Default for TorrentTrackerData {
-    fn default() -> Self {
-        Self {
-            info_hash: String::new(),
-            peers: HashMap::new(),
-        }
-    }
-}
-
 impl TorrentTrackerData {
     pub fn new(info_hash: String, peers: HashMap<String, PeerTrackerInfo>) -> TorrentTrackerData {
         TorrentTrackerData { info_hash, peers }

@@ -11,7 +11,6 @@ use chrono::Local;
 use gtk::glib::{Sender, Receiver};
 use gtk::{glib, prelude::*, ApplicationWindow, Builder};
 
-use patk_bittorrent_client::server::server_side::Notification;
 use patk_bittorrent_client::ui_notification_structs::peer_state::PeerState;
 use patk_bittorrent_client::ui_notification_structs::torrent_state::TorrentState;
 use patk_bittorrent_client::ui_notification_structs::ui_notification::UiNotification;
@@ -222,12 +221,12 @@ fn build_config_window(builder: Builder, config: Config) -> Result<gtk::Dialog, 
     let config_dialog_folder: gtk::TextView = builder
     .object("config_dialog_folder")
     .ok_or_else(|| "error".to_string())?;
-    config_dialog_folder.set_tooltip_text(Some(&format!("{}", config.download_path())));
+    config_dialog_folder.set_tooltip_text(Some(&config.download_path()));
     
     let config_dialog_file: gtk::TextView = builder
     .object("config_dialog_file")
     .ok_or_else(|| "error".to_string())?;
-    config_dialog_file.set_tooltip_text(Some(&format!("{}", config.log_path())));
+    config_dialog_file.set_tooltip_text(Some(&config.log_path()));
     
     let torrent_time_slice: gtk::TextView = builder
     .object("torrent_time_slice")
@@ -380,7 +379,7 @@ fn update_statistics_shown(statistics_grid: gtk::Grid, peers: Vec<PeerState>, pi
         msg = format!("peer ip: {}", peer.get_ip());
         statistics_grid.attach(make_row_label(&msg).borrow(), 1, pos, 1, 1);
         pos += 1;
-        msg = format!("peer port: {}", peer.get_port().to_string());
+        msg = format!("peer port: {}", peer.get_port());
         statistics_grid.attach(
             make_row_label(&msg).borrow(),
             1,
@@ -432,7 +431,7 @@ fn update_statistics_shown(statistics_grid: gtk::Grid, peers: Vec<PeerState>, pi
 fn set_up_info_window(torrent_name: &str){
     let statistics_grid = get_statistics_grid();
     let info_grid = get_general_info_grid();
-    let torrent_state = get_torrent_from_hash_by_name(torrent_name.clone());
+    let torrent_state = get_torrent_from_hash_by_name(&(*<&str>::clone(&torrent_name)));
     update_statistics_shown(statistics_grid, torrent_state.get_peers(), torrent_state.get_metadata_total_size()/torrent_state.get_metadata_n_pieces());
     let _ = update_general_information_shown(info_grid, torrent_state.clone(), torrent_state.get_total_peers(),torrent_state.get_peers().len());
 }
@@ -440,7 +439,7 @@ fn set_up_info_window(torrent_name: &str){
 fn make_row_button(torrent: &str) -> gtk::Button {
     let button = gtk::Button::with_label("Info.");
     let aux = button.clone();
-    let name: String = torrent.clone().to_string(); /*&format!("{}_button", torrent);*/
+    let name: String = <&str>::clone(&torrent).to_string(); /*&format!("{}_button", torrent);*/
     aux.set_widget_name(&format!("{}_button", torrent));
 
     button.connect_clicked(move |_| {
@@ -461,7 +460,7 @@ fn add_row_to_grid(grid: gtk::Grid, mut name: &str) {
     let file_name = make_row_label(name);
     file_name.set_wrap(true);
     let status = make_row_label(&format!("{}_progress", name));
-    let info_button = make_row_button(name.clone());
+    let info_button = make_row_button(<&str>::clone(&name));
     match grid.children().len().try_into() {
         Ok(mut top) => {
             top -= 2;
@@ -480,7 +479,7 @@ pub fn add_torrents_to_hash(states: Vec<TorrentState>){
             aux_hash.clone_from(torrent_hash);
             for state in states{
                 let aux_grid = get_torrent_grid();
-                if aux_hash.contains_key(&state.get_metadata_name()) == false {
+                if !aux_hash.contains_key(&state.get_metadata_name()) {
                     add_row_to_grid(aux_grid.clone(), &state.get_metadata_name());
                 }
                 let _ = aux_hash.insert(state.get_metadata_name(), state.clone());
@@ -505,7 +504,7 @@ pub fn get_torrent_from_hash_by_name(name: &str)->TorrentState{
     let mut aux: TorrentState = TorrentState::new(0);
     TORRENTS.with(|torrents| {
         if let Some(torrent_hash) = &*torrents.borrow() {
-            if let Some(torrent) = torrent_hash.get(name.clone()){
+            if let Some(torrent) = torrent_hash.get(<&str>::clone(&name)){
                 aux = torrent.clone();
             }
         }
@@ -658,19 +657,19 @@ fn main() -> Result<(), String> {
     });
     let (notif_tx, notif_rx) = mpsc::channel();
     
-    let mut client = ClientSide::new(&config.clone(), logger.handle());
-    let mut server = ServerSide::new(client.get_id(), &config.clone(), logger.handle());
+    let mut client = ClientSide::new(&config, logger.handle());
+    let mut server = ServerSide::new(client.get_id(), &config, logger.handle());
     
     server.set_peer_id(client.get_id());
     server.set_ui_sender(Some(updater_tx));
     server.init(notif_tx.clone(), notif_rx)?;
     
-    let log_peer_id = format!(
+    let _log_peer_id = format!(
         "Client Peer ID: {}",
         utils::bytes_to_string(&client.get_id())?
     );
     
-    let mut download_pool = client.init(notif_tx.clone())?;
+    let mut download_pool = client.init(notif_tx)?;
     start_client_worker(path_rx, client);
     download_pool.wait_for_workers();
     Ok(())

@@ -68,7 +68,7 @@ impl DownloadWorkerState {
         connections_qty: usize,
         peer_states: Vec<PeerState>,
     ) -> TorrentState {
-        let mut state = TorrentState::new(self.total_peers.clone());
+        let mut state = TorrentState::new(self.total_peers);
         state.set_metadata_connections(connections_qty);
         state.set_metadata_downloaded(self.downloaded_pieces as u32);
         state.set_metadata_info_hash(self.info_hash);

@@ -15,26 +15,23 @@ use super::{
     tracker_info::{
         peer_tracker_info::{PeerTrackerInfo, PeerTrackerState},
         torrent_registry::TorrentRegistry,
-        torrent_tracker_info::TorrentTrackerData,
     },
 };
 pub struct WebServer {
-    torrent_registry: TorrentRegistry,
     pool: WebServerThreadPool,
 }
 
 impl WebServer {
     pub fn new() -> Result<WebServer, PoolCreationError> {
         let torrent_registry = TorrentRegistry::new();
-        let pool = WebServerThreadPool::new(5, torrent_registry.clone())?;
+        let pool = WebServerThreadPool::new(5, torrent_registry)?;
         Ok(WebServer {
             pool,
-            torrent_registry,
         })
     }
     pub fn run(&self) -> Result<(), String> {
         self.pool
-            .execute(|registry| WebServer::track_stats(registry));
+            .execute(WebServer::track_stats);
         let listener = TcpListener::bind("localhost:7878").map_err(|err| err.to_string())?;
         for stream in listener.incoming().flatten() {
             self.pool
@@ -46,7 +43,7 @@ impl WebServer {
 
     fn track_stats(torrent_registry: TorrentRegistry) {
         loop {
-            torrent_registry.save_to_json();
+            let _ = torrent_registry.save_to_json();
             thread::sleep(Duration::from_secs(60));
         }
     }
@@ -93,8 +90,8 @@ fn process_get_request(
     torrent_registry: TorrentRegistry,
     peer_ip: IpAddr,
 ) -> Vec<u8> {
-    if requested_uri.starts_with("/announce?") {
-        let query = requested_uri[10..].to_string();
+    if let Some(query_params) = requested_uri.strip_prefix("/announce?") {
+        let query = query_params.to_string();
         process_announce(query, torrent_registry, peer_ip)
     } else if requested_uri.starts_with("/stats?get_data") {
         get_stats_data()
@@ -122,16 +119,16 @@ fn process_params(
 ) -> Result<Vec<u8>, Vec<u8>> {
     let err_response = b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".to_vec();
 
-    let info_hash = params.get("info_hash").ok_or(err_response.clone())?.clone();
-    let peer_id = params.get("peer_id").ok_or(err_response.clone())?.clone();
-    let port = params.get("port").ok_or(err_response.clone())?;
+    let info_hash = params.get("info_hash").ok_or_else(|| err_response.clone())?;
+    let peer_id = params.get("peer_id").ok_or_else(|| err_response.clone())?;
+    let port = params.get("port").ok_or_else(|| err_response.clone())?;
     let port: u16 = port
         .parse()
         .map_err(|_| b"HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n".to_vec())?;
 
     if let Some(compact) = params.get("compact") {
         if compact != "1" {
-            return Err(err_response.clone());
+            return Err(err_response);
         }
     }
 
@@ -141,7 +138,7 @@ fn process_params(
         })?,
         None => match peer_ip {
             IpAddr::V4(ip) => ip,
-            IpAddr::V6(_) => return Err(err_response.clone()),
+            IpAddr::V6(_) => return Err(err_response),
         },
     };
 
@@ -163,11 +160,11 @@ fn process_params(
             "started" => PeerTrackerState::Started,
             "completed" => PeerTrackerState::Completed,
             "stopped" => PeerTrackerState::Stopped,
-            _ => return Err(err_response.clone()),
+            _ => return Err(err_response),
         };
 
-        let peer = PeerTrackerInfo::new(peer_id, ip, port, state);
-        torrent_registry.insert(info_hash, peer);
+        let peer = PeerTrackerInfo::new(peer_id.to_string(), ip, port, state);
+        torrent_registry.insert(info_hash.to_string(), peer);
     }
     Ok(response)
 }
@@ -189,7 +186,7 @@ fn get_tracker_response(
             response
         }
         Err(_) => {
-            return b"HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n".to_vec()
+            b"HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n".to_vec()
         }
     }
 }

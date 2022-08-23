@@ -60,7 +60,7 @@ impl Config {
     }
 
     pub fn get_tcp_port(&self) -> usize {
-        self.tcp_port.clone()
+        self.tcp_port
     }
 
     pub fn get_max_download_connections(&self) -> usize {

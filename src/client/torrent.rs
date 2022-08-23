@@ -371,22 +371,22 @@ impl Torrent {
 
                     drop(downloaded_pieces);
 
-                    let tracker_info = self.request_tracker_info(client_id.clone(), client_port.clone())?;
+                    let tracker_info = self.request_tracker_info(client_id, client_port)?;
                     let mut new_state = DownloadWorkerState::new(
-                        download_worker_id.clone(),
-                        self.info_hash.clone(),
-                        peer.id().clone(),
+                        download_worker_id,
+                        self.info_hash,
+                        peer.id(),
                         peer.ip(),
                         peer.port(),
                         self.name.clone(),
-                        self.total_pieces.clone(),
-                        Some(last_download_time.clone()),
+                        self.total_pieces,
+                        Some(last_download_time),
                         tracker_info.peers_list().len()
                     );
                     new_state.total_size = self.get_total_size();
                     new_state.set_am_interested(peer.am_interested());
                     new_state.set_am_choked(peer.am_choked());
-                    new_state.set_downloaded_pieces(current_pieces.clone());
+                    new_state.set_downloaded_pieces(current_pieces);
                     new_state.set_is_interested(peer.is_interested());
                     new_state.set_is_choked(peer.is_choked());
 

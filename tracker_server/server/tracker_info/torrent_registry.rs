@@ -27,30 +27,24 @@ impl TorrentRegistry {
             tracked_torrents_mutex,
         }
     }
-    pub fn get_torrent_count(&self) -> Result<usize, String> {
-        let tracked_torrents = self
-            .tracked_torrents_mutex
-            .lock()
-            .map_err(|err| format!("Mutex lock error: {}", err))?;
-        Ok(tracked_torrents.len())
-    }
+
     pub fn insert(&self, info_hash: String, peer: PeerTrackerInfo) {
         if let Ok(mut tracked_torrents) = self.tracked_torrents_mutex.lock() {
             let torrent = tracked_torrents.get_mut(&info_hash);
-            let torrent_to_insert;
-            match torrent {
+            
+            let torrent_to_insert = match torrent {
                 Some(tracked_torrent) => {
-                    tracked_torrent.insert_peer(peer.clone());
-                    torrent_to_insert = tracked_torrent.clone();
+                    tracked_torrent.insert_peer(peer);
+                    tracked_torrent.clone()
                 }
                 None => {
                     let peers_hash = HashMap::<String, PeerTrackerInfo>::new();
                     let mut new_torrent_data =
-                        TorrentTrackerData::new(info_hash.clone(), peers_hash.clone());
-                    new_torrent_data.insert_peer(peer.clone());
-                    torrent_to_insert = new_torrent_data;
+                        TorrentTrackerData::new(info_hash.clone(), peers_hash);
+                    new_torrent_data.insert_peer(peer);
+                    new_torrent_data
                 }
-            }
+            };
             tracked_torrents.insert(info_hash, torrent_to_insert);
         };
     }
@@ -70,7 +64,7 @@ impl TorrentRegistry {
                 torrents_map.insert(key.clone(), value);
             }
         }
-        Ok(serde_json::to_value(torrents_map).map_err(|err| err.to_string())?)
+        serde_json::to_value(torrents_map).map_err(|err| err.to_string())
     }
 
     pub fn get_bencoded_contents(
@@ -100,9 +94,7 @@ impl TorrentRegistry {
                 content.append(&mut b"e".to_vec());
                 Ok(content)
             }
-            None => Ok(format!(
-                "d14:failure reason44:Torrent Not Offered. Added you as first peere"
-            )
+            None => Ok("d14:failure reason44:Torrent Not Offered. Added you as first peere".to_string()
             .as_bytes()
             .to_vec()),
         }
@@ -123,7 +115,7 @@ impl TorrentRegistry {
             }
         };
         let reader = BufReader::new(file);
-        let mut json_data: Value = match serde_json::from_reader::<BufReader<File>, Value>(reader){
+        let json_data: Value = match serde_json::from_reader::<BufReader<File>, Value>(reader){
             Ok(json) => json,
             Err(_) => Value::Object(Map::new()),
         };
@@ -138,8 +130,7 @@ impl TorrentRegistry {
                 }
             }
             let now = Local::now().timestamp().to_string();
-            let value = self.get_info_json().map_err(|err| err.to_string())?;
-            new_map.insert(now, value);
+            new_map.insert(now, self.get_info_json().map_err(|err| err)?);
             let updated_json_data = serde_json::to_value(new_map).map_err(|err| err.to_string())?;
             let string =
                 serde_json::to_string_pretty(&updated_json_data).map_err(|err| err.to_string())?;

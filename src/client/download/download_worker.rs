@@ -54,7 +54,7 @@ impl DownloadWorker {
                     notif_tx.clone(),
                     &log_handle,
                     id,
-                    client_port.clone(),
+                    client_port,
                 )?;
             }
         }));

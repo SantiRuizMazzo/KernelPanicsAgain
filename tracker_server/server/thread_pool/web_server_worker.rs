@@ -3,7 +3,7 @@ use std::{
     thread,
 };
 
-use crate::server::tracker_info::torrent_registry::{self, TorrentRegistry};
+use crate::server::tracker_info::torrent_registry::TorrentRegistry;
 
 type Job = Box<dyn FnOnce(TorrentRegistry) + Send + 'static>;
 

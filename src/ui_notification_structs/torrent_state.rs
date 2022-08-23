@@ -84,11 +84,11 @@ impl TorrentState {
     }
 
     pub fn get_total_peers(&self) -> usize {
-        self.total_peers.clone()
+        self.total_peers
     }
 
     pub fn get_completion_precentage(&self) -> f64 {
-        ((self.get_metadata_downloadede() as f64)/(self.get_metadata_n_pieces() as f64)) * 100.0
+        ((self.get_metadata_downloaded() as f64)/(self.get_metadata_n_pieces() as f64)) * 100.0
     }
 }
 
