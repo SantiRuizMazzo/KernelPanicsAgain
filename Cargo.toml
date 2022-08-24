@@ -22,7 +22,3 @@ path = "./UI/main.rs"
 [[bin]]
 name = "tracker_server"
 path = "./tracker_server/main.rs"
-
-[[bin]]
-name = "tracker_client"
-path = "./tracker_client/main.rs"

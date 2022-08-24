@@ -115,22 +115,13 @@ impl Peer {
         torrent: &Torrent,
         log_handle: LogHandle,
     ) -> Result<TcpStream, ProtocolError> {
-        /*log_handle
-        .log(&format!("Connecting to: {}", self.address()))
-        .map_err(ProtocolError::Peer)?;*/
         let mut stream =
             TcpStream::connect(self.address()).map_err(|e| ProtocolError::Peer(e.to_string()))?;
-        /*log_handle
-        .log(&format!("Connected to: {}", self.address()))
-        .map_err(ProtocolError::Peer)?;*/
         peer_protocol::handle_handshakes(&mut stream, client_id, torrent.info_hash())?;
         log_handle
             .log(&format!("Handshaked with: {}", self.address()))
             .map_err(ProtocolError::Peer)?;
         self.bitfield.set_size(torrent.total_pieces());
-        /*stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .map_err(|e| ProtocolError::Peer(e.to_string()))?;*/
         Ok(stream)
     }
 
@@ -138,18 +129,15 @@ impl Peer {
         &mut self,
         mut stream: TcpStream,
         piece_index: usize,
-        _log_handle: LogHandle,
     ) -> Result<TcpStream, ProtocolError> {
         if self.bitfield.contains(piece_index) {
             if !self.am_interested {
                 let interested = Interested::new();
                 interested.send(&mut stream)?;
                 self.am_interested = true;
-                //let _ = log_handle.log(&format!("> {interested:?}"));
             }
             if !self.am_choked && self.am_interested {
                 self.last_request.send(&mut stream)?;
-                //let _ = log_handle.log(&format!("> {:?}", self.last_request));
             }
         }
         Ok(stream)
@@ -166,10 +154,10 @@ impl Peer {
 
         let mut stream = match self.connection.take() {
             None => self.open_connection(client_id, torrent, log_handle.clone())?,
-            Some(stream) => self.reuse_connection(stream, piece.index(), log_handle.clone())?,
+            Some(stream) => self.reuse_connection(stream, piece.index())?,
         };
 
-        match self.handle_messages(&mut stream, piece, torrent.downloaded(), log_handle) {
+        match self.handle_messages(&mut stream, piece, torrent.downloaded()) {
             Ok(()) => {
                 self.connection = Some(stream);
                 Ok(())
@@ -187,12 +175,10 @@ impl Peer {
         stream: &mut TcpStream,
         piece: &mut Piece,
         downloaded_mutex: DownloadedPieces,
-        log_handle: &LogHandle,
     ) -> Result<(), ProtocolError> {
         loop {
             let message_bytes = peer_protocol::read_message_bytes(stream)?;
             let message = PeerMessage::from(message_bytes)?;
-            //let _ = log_handle.log(&format!("< {message:?}"));
 
             match message {
                 PeerMessage::Choke => {
@@ -203,7 +189,6 @@ impl Peer {
                     &mut self.last_request,
                     &mut self.am_choked,
                     self.am_interested,
-                    log_handle.clone(),
                 )?,
                 PeerMessage::Have(have) => peer_protocol::handle_have(
                     stream,
@@ -211,7 +196,6 @@ impl Peer {
                     &mut self.bitfield,
                     &mut self.am_interested,
                     downloaded_mutex.clone(),
-                    log_handle.clone(),
                 )?,
                 PeerMessage::Bitfield(bitfield) => {
                     self.bitfield = bitfield;
@@ -220,7 +204,6 @@ impl Peer {
                         &mut self.bitfield,
                         piece.index(),
                         &mut self.am_interested,
-                        log_handle.clone(),
                     )?;
                 }
                 PeerMessage::Block(block) => {
@@ -230,7 +213,6 @@ impl Peer {
                         piece,
                         &mut self.last_request,
                         self.am_choked,
-                        log_handle.clone(),
                     )?;
 
                     if piece.is_full() {

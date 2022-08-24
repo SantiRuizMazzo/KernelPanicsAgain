@@ -1,7 +1,6 @@
 use super::download_pool::DownloadedPieces;
 use crate::{
     client::piece::Piece,
-    logging::log_handle::LogHandle,
     messages::message_types::{
         bitfield::Bitfield,
         block::Block,
@@ -124,12 +123,10 @@ pub fn handle_unchoke(
     last_request: &mut Request,
     am_choked: &mut bool,
     am_interested: bool,
-    _log_handle: LogHandle,
 ) -> Result<(), ProtocolError> {
     *am_choked = false;
     if am_interested {
         last_request.send(stream)?;
-        //let _ = log_handle.log(&format!("> {last_request:?}"));
     }
     Ok(())
 }
@@ -140,7 +137,6 @@ pub fn handle_have(
     bitfield: &mut Bitfield,
     am_interested: &mut bool,
     downloaded_mutex: DownloadedPieces,
-    _log_handle: LogHandle,
 ) -> Result<(), ProtocolError> {
     let new_piece_index = have.index() as usize;
     bitfield.add_piece(new_piece_index);
@@ -157,7 +153,6 @@ pub fn handle_have(
         *am_interested = true;
         let interested = Interested::new();
         interested.send(stream)?;
-        //let _ = log_handle.log(&format!("> {interested:?}"));
     }
     Ok(())
 }
@@ -167,7 +162,6 @@ pub fn handle_bitfield(
     bitfield: &mut Bitfield,
     piece_index: usize,
     am_interested: &mut bool,
-    _log_handle: LogHandle,
 ) -> Result<(), ProtocolError> {
     if !bitfield.contains(piece_index) {
         let msg = format!("Remote peer is not serving piece {piece_index}");
@@ -177,7 +171,6 @@ pub fn handle_bitfield(
     *am_interested = true;
     let interested = Interested::new();
     interested.send(stream)?;
-    //let _ = log_handle.log(&format!("> {interested:?}"));
     Ok(())
 }
 
@@ -187,7 +180,6 @@ pub fn handle_request(
     peer_is_choked: bool,
     download_path: String,
     bitfield: &Bitfield,
-    _log_handle: LogHandle,
 ) -> Result<(), ProtocolError> {
     let err = ProtocolError::Peer;
 
@@ -199,14 +191,12 @@ pub fn handle_request(
     if !bitfield.contains(request.index() as usize) {
         let cancel = request.cancel();
         cancel.send(stream)?;
-        //log_handle.log(&format!("> {cancel:?}")).map_err(err)?;
         let msg = format!("Requested piece {} is not being served", request.index());
         return Err(err(msg));
     }
 
     let block_to_send = request.load_block_from(download_path).map_err(err)?;
     block_to_send.send(stream)?;
-    //log_handle.log(&format!("> {block_to_send:?}")).map_err(err)
     Ok(())
 }
 
@@ -216,7 +206,6 @@ pub fn handle_block(
     piece: &mut Piece,
     last_request: &mut Request,
     am_choked: bool,
-    _log_handle: LogHandle,
 ) -> Result<(), ProtocolError> {
     if am_choked {
         return Ok(());
@@ -224,7 +213,6 @@ pub fn handle_block(
 
     if !last_request.matches(&block) {
         last_request.send(stream)?;
-        //let _ = log_handle.log(&format!("> {last_request:?}"));
         return Ok(());
     }
 
@@ -240,6 +228,5 @@ pub fn handle_block(
 
     *last_request = piece.request_next_block();
     last_request.send(stream)?;
-    //let _ = log_handle.log(&format!("> {last_request:?}"));
     Ok(())
 }

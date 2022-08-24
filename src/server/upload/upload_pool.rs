@@ -1,7 +1,5 @@
 use super::{upload_info::UploadInfo, upload_worker::UploadWorker};
-use crate::{
-    client::piece::Piece, logging::log_handle::LogHandle, server::server_side::Notification,
-};
+use crate::{client::piece::Piece, server::server_side::Notification};
 use std::{
     collections::HashMap,
     net::TcpStream,
@@ -33,7 +31,6 @@ impl UploadPool {
         &mut self,
         stream: TcpStream,
         notif_tx: &Sender<Notification>,
-        log_handle: &LogHandle,
     ) -> Result<(), String> {
         let worker = UploadWorker::new(
             self.workers.len(),
@@ -41,7 +38,6 @@ impl UploadPool {
             self.server_id,
             self.torrents.clone(),
             notif_tx.clone(),
-            log_handle.clone(),
         )?;
 
         self.workers.insert(worker.id(), worker);

@@ -265,7 +265,6 @@ impl Torrent {
         }
 
         let tracker_info = self.request_tracker_info(client_id, 6881)?;
-        //let tracker_info = TrackerInfo::new(0,vec![Peer::new(Some(client_id), "localhost".to_string(), 8081, 0)]);
 
         for peer in tracker_info.peers_list() {
             self.peer_tx.send(peer).map_err(|e| e.to_string())?;
@@ -397,12 +396,10 @@ impl Torrent {
                     have_peer = Some(peer);
                 }
                 Err(ProtocolError::Piece(_)) => {
-                    //let _ = log_handle.log(&format!("Changing piece {} -> {e}", piece.index()));
                     self.discard_piece(piece)?;
                     have_peer = Some(peer);
                 }
                 Err(ProtocolError::Peer(_)) => {
-                    //let _ = log_handle.log(&format!("Changing peer {} -> {e}", peer.address()));
                     self.discard_peer(peer)?;
                     have_piece = Some(piece);
                 }

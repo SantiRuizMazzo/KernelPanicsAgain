@@ -55,7 +55,6 @@ impl ServerSide {
         let _notification_thread = self.init_notifications(notif_tx.clone(), notif_rx)?;
         let _connection_thread = self.init_connections(notif_tx)?;
         Ok(())
-        //Fix: notification and connection remain as zombie threads, must store their handles and join them
     }
 
     fn init_notifications(
@@ -77,7 +76,7 @@ impl ServerSide {
                         pool.add_piece(piece, upload_info)?;
                     }
                     Notification::NewPeer(stream) => {
-                        if let Err(e) = pool.add_worker(stream, &notif_tx, &log_handle) {
+                        if let Err(e) = pool.add_worker(stream, &notif_tx) {
                             log_handle.log(&format!("Worker creation error: {e}"))?;
                         }
                     }
@@ -111,7 +110,6 @@ impl ServerSide {
     ) -> Result<JoinHandle<Result<(), SendError<Notification>>>, String> {
         let socket = TcpListener::bind(self.config.server_address()).map_err(|e| e.to_string())?;
 
-        //Fix: loop never ends, must implement a way to kill connection thread
         let thread: JoinHandle<Result<(), SendError<Notification>>> = thread::spawn(move || {
             for stream in socket.incoming().flatten() {
                 notif_tx.send(Notification::NewPeer(stream))?

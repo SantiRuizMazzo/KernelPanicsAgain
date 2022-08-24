@@ -1,6 +1,5 @@
 use crate::{
     client::download::{peer::Peer, peer_protocol},
-    logging::log_handle::LogHandle,
     messages::{
         message_types::{handshake::Handshake, have::Have, unchoke::Unchoke},
         peer_message::PeerMessage,
@@ -31,7 +30,6 @@ impl UploadWorker {
         server_id: [u8; 20],
         torrents_mutex: Arc<Mutex<HashMap<[u8; 20], UploadInfo>>>,
         notif_tx: Sender<Notification>,
-        log_handle: LogHandle,
     ) -> Result<Self, String> {
         let handshake = Self::validate_connection(&mut stream, server_id, torrents_mutex.clone())?;
         let mut peer = Self::connected_peer(&stream, handshake.peer_id())?;
@@ -50,15 +48,11 @@ impl UploadWorker {
             let download_path = upload_info.download_path();
             drop(torrents);
 
-            log_handle.log(&format!("Starting worker {id}"))?;
-
             local_bitfield.send(&mut stream).map_err(|e| {
                 let _ = notif_tx.send(Notification::EndPeer(id));
                 e.to_string()
             })?;
-            //log_handle.log(&format!("> {local_bitfield:?}"))?;
 
-            //Fix: every ?-handled error inside this loop may lead to end thread without sending a notification
             loop {
                 if peer.is_interested() && peer.is_choked() {
                     let unchoke = Unchoke::new();
@@ -67,22 +61,16 @@ impl UploadWorker {
                         e.to_string()
                     })?;
                     peer.unchoke();
-                    //let _ = log_handle.log(&format!("> {unchoke:?}"));
                 }
 
                 let mut len = [0u8; 4];
                 match stream.read(&mut len) {
                     Ok(n) => {
                         if n < len.len() {
-                            let _ = log_handle.log(&format!(
-                                "Read less bytes than len field has ({n}/{})",
-                                len.len()
-                            ));
                             break;
                         }
                     }
                     Err(e) => {
-                        //let _ = log_handle.log(&format!("Error reading len ({e:?})"));
                         if e.kind() != ErrorKind::WouldBlock {
                             break;
                         }
@@ -105,7 +93,6 @@ impl UploadWorker {
                                     let _ = notif_tx.send(Notification::EndPeer(id));
                                     e.to_string()
                                 })?;
-                                //log_handle.log(&format!("> {have:?}"))?;
                             }
                         }
 
@@ -130,43 +117,15 @@ impl UploadWorker {
                     }
                 }
 
-                if let Err(e) = stream.read(&mut message_bytes) {
-                    let _ = log_handle.log(&format!("ERROR DEL READ TO END {e:?}"));
-                }
+                let _ = stream.read(&mut message_bytes);
 
-                /*match stream.read(&mut message_bytes) {
-                    Ok(n) => {
-                        if n < message_bytes.len() {
-                            let _ = log_handle.log(&format!(
-                                "Read less bytes than message body has ({n}/{len})"
-                            ));
-                            continue;
-                        }
-                    }
-                    Err(e) => {
-                        let _ = log_handle.log(&format!("Error reading message body ({e:?})"));
-                        break;
-                    }
-                };*/
-
-                /*let message_bytes = match peer_protocol::read_message_bytes(&mut stream) {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        let _ = log_handle.log(&format!("Error reading bytes from stream ({e})"));
-                        break;
-                    }
-                };*/
-
-                //log_handle.log(&format!("ID & PAYLOAD {message_bytes:?}"))?;
                 let message = match PeerMessage::from(message_bytes) {
                     Ok(msg) => msg,
-                    Err(e) => {
-                        let _ = log_handle.log(&format!("Error parsing message ({e})"));
+                    Err(_) => {
                         break;
                     }
                 };
 
-                //log_handle.log(&format!("< {message:?}"))?;
                 match message {
                     PeerMessage::Interested => peer.set_interested(),
                     PeerMessage::NotInterested => peer.set_not_interested(),
@@ -177,7 +136,6 @@ impl UploadWorker {
                             peer.is_choked(),
                             download_path.clone(),
                             &local_bitfield,
-                            log_handle.clone(),
                         )
                         .is_err()
                         {
@@ -206,7 +164,6 @@ impl UploadWorker {
                             let _ = notif_tx.send(Notification::EndPeer(id));
                             e.to_string()
                         })?;
-                        //log_handle.log(&format!("> {have:?}"))?;
                     }
                 }
 
