@@ -7,6 +7,7 @@ use crate::{
     },
     server::server_side::Notification,
 };
+use chrono::Utc;
 use std::{
     collections::HashMap,
     io::{ErrorKind, Read},
@@ -73,7 +74,10 @@ impl UploadWorker {
                 match stream.read(&mut len) {
                     Ok(n) => {
                         if n < len.len() {
-                            let _ = log_handle.log("Read less bytes than len field has");
+                            let _ = log_handle.log(&format!(
+                                "Read less bytes than len field has ({n}/{})",
+                                len.len()
+                            ));
                             break;
                         }
                     }
@@ -114,7 +118,23 @@ impl UploadWorker {
                 let len = u32::from_be_bytes(len);
                 let mut message_bytes = vec![0u8; len as usize];
 
-                match stream.read(&mut message_bytes) {
+                let started_waiting = Utc::now().timestamp();
+                let mut n = 0;
+                while n < message_bytes.len() {
+                    let current_time = Utc::now().timestamp();
+                    if (current_time - started_waiting) > 5 {
+                        break;
+                    }
+                    if let Ok(number) = stream.peek(&mut message_bytes) {
+                        n = number
+                    }
+                }
+
+                if let Err(e) = stream.read(&mut message_bytes) {
+                    let _ = log_handle.log(&format!("ERROR DEL READ TO END {e:?}"));
+                }
+
+                /*match stream.read(&mut message_bytes) {
                     Ok(n) => {
                         if n < message_bytes.len() {
                             let _ = log_handle.log(&format!(
@@ -123,11 +143,11 @@ impl UploadWorker {
                             continue;
                         }
                     }
-                    Err(_e) => {
-                        //let _ = log_handle.log(&format!("Error reading message body ({e:?})"));
+                    Err(e) => {
+                        let _ = log_handle.log(&format!("Error reading message body ({e:?})"));
                         break;
                     }
-                };
+                };*/
 
                 /*let message_bytes = match peer_protocol::read_message_bytes(&mut stream) {
                     Ok(bytes) => bytes,
@@ -218,7 +238,7 @@ impl UploadWorker {
 
         drop(torrents);
         stream
-            .set_read_timeout(Some(Duration::from_secs(1)))
+            .set_read_timeout(Some(Duration::from_secs(10)))
             .map_err(|e| e.to_string())?;
         peer_protocol::send_handshake(stream, server_id, handshake.info_hash())
             .map_err(|e| e.to_string())?;

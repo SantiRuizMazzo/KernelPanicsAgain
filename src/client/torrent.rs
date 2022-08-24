@@ -19,7 +19,8 @@ use std::{
     sync::{
         mpsc::{self, Sender},
         Arc, Mutex,
-    }, time::Instant,
+    },
+    time::Instant,
 };
 
 use super::{
@@ -28,8 +29,9 @@ use super::{
         download_pool::{
             DownloadMessage, DownloadedPieces, PeerReceiver, PeerSender, PieceReceiver, PieceSender,
         },
+        download_worker_state::DownloadWorkerState,
         peer::Peer,
-        peer_protocol::ProtocolError, download_worker_state::DownloadWorkerState,
+        peer_protocol::ProtocolError,
     },
 };
 
@@ -333,7 +335,6 @@ impl Torrent {
         notif_tx: Sender<Notification>,
         log_handle: &LogHandle,
         download_worker_id: usize,
-        client_port: u32
     ) -> Result<(), String> {
         let (mut have_piece, mut have_peer) = (None, None);
         let mut download_counter = 0;
@@ -351,13 +352,12 @@ impl Torrent {
             }
             drop(downloaded);
 
-            /* */
-
             match peer.download(&mut piece, self, client_id, log_handle) {
                 Ok(()) => {
                     let last_download_time = Instant::now();
                     let final_path = format!("{}/.tmp/{}", self.download_path, piece.index());
                     if Path::new(&final_path).is_file() {
+                        have_peer = Some(peer);
                         continue;
                     }
 
@@ -365,23 +365,24 @@ impl Torrent {
                     self.notify_piece(piece.clone(), notif_tx.clone())?;
                     self.update_status(piece, log_handle.clone())?;
                     download_counter += 1;
-                    have_peer = Some(peer.clone());
                     let downloaded_pieces = self.downloaded.lock().map_err(|e| e.to_string())?;
                     let current_pieces = downloaded_pieces.len();
 
                     drop(downloaded_pieces);
 
-                    let tracker_info = self.request_tracker_info(client_id, client_port)?;
+                    let mut total_peers = 0;
+                    if let TrackerInfoState::Set(tracker_info) = self.tracker_info.clone() {
+                        total_peers = tracker_info.peers_list().len()
+                    }
+
                     let mut new_state = DownloadWorkerState::new(
                         download_worker_id,
                         self.info_hash,
-                        peer.id(),
-                        peer.ip(),
-                        peer.port(),
+                        peer.clone(),
                         self.name.clone(),
                         self.total_pieces,
                         Some(last_download_time),
-                        tracker_info.peers_list().len()
+                        total_peers,
                     );
                     new_state.total_size = self.get_total_size();
                     new_state.set_am_interested(peer.am_interested());
@@ -393,6 +394,7 @@ impl Torrent {
                     notif_tx
                         .send(Notification::UpdateUi(new_state))
                         .map_err(|err| err.to_string())?;
+                    have_peer = Some(peer);
                 }
                 Err(ProtocolError::Piece(_)) => {
                     //let _ = log_handle.log(&format!("Changing piece {} -> {e}", piece.index()));
@@ -406,7 +408,7 @@ impl Torrent {
                 }
             }
         }
-        //Fix: when a download interval is finished peers and pieces may be lost due to not adding them to their queues again
+
         if let Some(piece) = have_piece {
             self.discard_piece(piece)?;
         }

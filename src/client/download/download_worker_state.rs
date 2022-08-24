@@ -2,13 +2,13 @@ use std::time::Instant;
 
 use crate::ui_notification_structs::{peer_state::PeerState, torrent_state::TorrentState};
 
+use super::peer::Peer;
+
 impl DownloadWorkerState {
     pub fn new(
         id: usize,
         info_hash: [u8; 20],
-        curr_peer_id: Option<[u8; 20]>,
-        peer_ip: String,
-        peer_port: u16,
+        current_peer: Peer,
         torrent_name: String,
         n_pieces: usize,
         last_download_instant: Option<Instant>,
@@ -17,9 +17,9 @@ impl DownloadWorkerState {
         DownloadWorkerState {
             id,
             info_hash,
-            curr_peer_id,
-            peer_ip,
-            peer_port,
+            curr_peer_id: current_peer.id(),
+            peer_ip: current_peer.ip(),
+            peer_port: current_peer.port(),
             am_interested: true,
             am_choked: true,
             is_interested: true,

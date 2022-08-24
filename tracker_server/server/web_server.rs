@@ -25,13 +25,10 @@ impl WebServer {
     pub fn new() -> Result<WebServer, PoolCreationError> {
         let torrent_registry = TorrentRegistry::new();
         let pool = WebServerThreadPool::new(5, torrent_registry)?;
-        Ok(WebServer {
-            pool,
-        })
+        Ok(WebServer { pool })
     }
     pub fn run(&self) -> Result<(), String> {
-        self.pool
-            .execute(WebServer::track_stats);
+        self.pool.execute(WebServer::track_stats);
         let listener = TcpListener::bind("localhost:7878").map_err(|err| err.to_string())?;
         for stream in listener.incoming().flatten() {
             self.pool
@@ -119,7 +116,9 @@ fn process_params(
 ) -> Result<Vec<u8>, Vec<u8>> {
     let err_response = b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n".to_vec();
 
-    let info_hash = params.get("info_hash").ok_or_else(|| err_response.clone())?;
+    let info_hash = params
+        .get("info_hash")
+        .ok_or_else(|| err_response.clone())?;
     let peer_id = params.get("peer_id").ok_or_else(|| err_response.clone())?;
     let port = params.get("port").ok_or_else(|| err_response.clone())?;
     let port: u16 = port
@@ -185,9 +184,7 @@ fn get_tracker_response(
             response.append(&mut content);
             response
         }
-        Err(_) => {
-            b"HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n".to_vec()
-        }
+        Err(_) => b"HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n".to_vec(),
     }
 }
 

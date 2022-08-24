@@ -31,7 +31,7 @@ impl TorrentRegistry {
     pub fn insert(&self, info_hash: String, peer: PeerTrackerInfo) {
         if let Ok(mut tracked_torrents) = self.tracked_torrents_mutex.lock() {
             let torrent = tracked_torrents.get_mut(&info_hash);
-            
+
             let torrent_to_insert = match torrent {
                 Some(tracked_torrent) => {
                     tracked_torrent.insert_peer(peer);
@@ -94,9 +94,12 @@ impl TorrentRegistry {
                 content.append(&mut b"e".to_vec());
                 Ok(content)
             }
-            None => Ok("d14:failure reason44:Torrent Not Offered. Added you as first peere".to_string()
-            .as_bytes()
-            .to_vec()),
+            None => Ok(
+                "d14:failure reason44:Torrent Not Offered. Added you as first peere"
+                    .to_string()
+                    .as_bytes()
+                    .to_vec(),
+            ),
         }
     }
 
@@ -104,18 +107,19 @@ impl TorrentRegistry {
         let now = Local::now().timestamp();
         let three_days_as_seconds: i64 = 259200;
         let file = match File::open("./tracker_server/server/data.json") {
-                Ok(file ) => file,
-                Err(_) => {
-                    let new_file = File::create("./tracker_server/server/data.json");
-                    match new_file {
-                        Ok(file) => file,
-                        Err(_) => {return Err("Error while creating data.json".to_string());}
+            Ok(file) => file,
+            Err(_) => {
+                let new_file = File::create("./tracker_server/server/data.json");
+                match new_file {
+                    Ok(file) => file,
+                    Err(_) => {
+                        return Err("Error while creating data.json".to_string());
                     }
-
+                }
             }
         };
         let reader = BufReader::new(file);
-        let json_data: Value = match serde_json::from_reader::<BufReader<File>, Value>(reader){
+        let json_data: Value = match serde_json::from_reader::<BufReader<File>, Value>(reader) {
             Ok(json) => json,
             Err(_) => Value::Object(Map::new()),
         };

@@ -44,6 +44,8 @@ mod tests {
     fn test_logging_in_different_threads() -> Result<(), String> {
         let logger = Logger::new(Config::new()?.log_path())?;
         let handle = logger.handle();
+        handle.log("Este es un test de log")?;
+        handle.log("Este es otro de mis test de log")?;
 
         let thread = thread::spawn(move || {
             let thread_handle = logger.handle();
@@ -51,8 +53,6 @@ mod tests {
             thread_handle.log("Esto también!!!")
         });
         let _ = thread.join();
-
-        handle.log("Este es un test de log")?;
-        handle.log("Este es otro de mis test de log")
+        Ok(())
     }
 }

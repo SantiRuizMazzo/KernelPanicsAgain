@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 impl PeerState {
-    pub fn new(last_download_instant: Option<Instant>,) -> PeerState {
+    pub fn new(last_download_instant: Option<Instant>) -> PeerState {
         PeerState {
             id: "".to_string(),
             ip: "".to_string(),
@@ -70,7 +70,7 @@ impl PeerState {
         self.c_is_interested
     }
 
-    pub fn set_last_download_instant(&mut self, _last_download_instant: Option<Instant>,) {
+    pub fn set_last_download_instant(&mut self, _last_download_instant: Option<Instant>) {
         self.last_download_instant = _last_download_instant;
     }
 
@@ -78,16 +78,15 @@ impl PeerState {
         self.last_download_instant
     }
 
-    pub fn get_download_v(&self, piece_size: u32)->f64{
+    pub fn get_download_v(&self, piece_size: u32) -> f64 {
         let mut download_v: f64 = 0.0;
-        if let Some(downloaded_instant) = self.last_download_instant{
+        if let Some(downloaded_instant) = self.last_download_instant {
             let now = Instant::now();
             let time_lapse = now.duration_since(downloaded_instant);
-            download_v = (piece_size as f64)/time_lapse.as_secs_f64();
+            download_v = (piece_size as f64) / time_lapse.as_secs_f64();
         }
         download_v
     }
-
 }
 impl Default for PeerState {
     fn default() -> Self {

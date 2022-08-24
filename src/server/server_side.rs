@@ -6,12 +6,13 @@ use crate::{
 };
 use gtk::glib::Sender as UiSender;
 use std::{
+    collections::HashMap,
     net::{TcpListener, TcpStream},
     sync::{
         mpsc::Receiver,
         mpsc::{SendError, Sender},
     },
-    thread::{self, JoinHandle}, collections::HashMap,
+    thread::{self, JoinHandle},
 };
 
 use super::upload::{upload_info::UploadInfo, upload_pool::UploadPool};
@@ -40,7 +41,6 @@ impl ServerSide {
             log_handle,
             ui_sender: None,
         }
-
     }
 
     pub fn set_ui_sender(&mut self, sender: Option<UiSender<UiNotification>>) {
@@ -66,7 +66,7 @@ impl ServerSide {
         let log_handle = self.log_handle.clone();
         let mut pool = UploadPool::new(self.id);
         let mut hash_states: HashMap<usize, DownloadWorkerState> =
-                HashMap::<usize, DownloadWorkerState>::new();
+            HashMap::<usize, DownloadWorkerState>::new();
         let ui_option = self.ui_sender.clone();
 
         let thread: JoinHandle<Result<(), String>> = thread::spawn(move || {
@@ -97,7 +97,7 @@ impl ServerSide {
                                 None => Ok(()),
                             };
                         }
-                    },
+                    }
                 }
             }
             Ok(())

@@ -103,8 +103,7 @@ impl ClientSide {
         Ok(DownloadPool::new(
             self.id,
             &self.config,
-            &self.torrent_tx,
-            &self.torrent_rx,
+            (&self.torrent_tx, &self.torrent_rx),
             &self.downloaded_torrents,
             notif_tx,
             &self.log_handle,
@@ -129,79 +128,6 @@ mod tests {
         let logger = Logger::new(config.log_path())?;
         let client = ClientSide::new(&config, logger.handle());
         assert_eq!(20, client.id.len());
-        Ok(())
-    }
-
-    /*#[test]
-    fn load_a_single_torrent_from_a_path_to_file() -> Result<(), String> {
-        let config = Config::new()?;
-        let logger = Logger::new(config.get_log_path())?;
-        let mut client = ClientSide::new(&config, logger.handle());
-        let paths = vec!["tests/debian.torrent".to_string()];
-        client.load_torrents(paths)?;
-        assert_eq!(
-            vec![Torrent::from("tests/debian.torrent")?],
-            client.torrents
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn load_multiple_torrents_from_multiple_paths_to_files() -> Result<(), String> {
-        let config = Config::new()?;
-        let logger = Logger::new(config.get_log_path())?;
-        let mut client = ClientSide::new(&config, logger.handle());
-        let paths = vec![
-            "tests/debian.torrent".to_string(),
-            "tests/fedora.torrent".to_string(),
-            "tests/linuxmint.torrent".to_string(),
-        ];
-        client.load_torrents(paths)?;
-        let expected_torrents = vec![
-            Torrent::from("tests/debian.torrent")?,
-            Torrent::from("tests/fedora.torrent")?,
-            Torrent::from("tests/linuxmint.torrent")?,
-        ];
-        assert_eq!(expected_torrents, client.torrents);
-        Ok(())
-    }
-
-    #[test]
-    fn load_multiple_torrents_from_a_path_to_directory() -> Result<(), String> {
-        let config = Config::new()?;
-        let logger = Logger::new(config.get_log_path())?;
-        let mut client = ClientSide::new(&config, logger.handle());
-        let paths = vec!["tests".to_string()];
-        client.load_torrents(paths)?;
-        assert!(client
-            .torrents
-            .contains(&Torrent::from("tests/bla.torrent")?));
-        assert!(client
-            .torrents
-            .contains(&Torrent::from("tests/fedora.torrent")?));
-        assert!(client
-            .torrents
-            .contains(&Torrent::from("tests/debian.torrent")?));
-        assert!(client
-            .torrents
-            .contains(&Torrent::from("tests/linuxmint.torrent")?));
-        assert!(client
-            .torrents
-            .contains(&Torrent::from("tests/sample.torrent")?));
-        assert!(client
-            .torrents
-            .contains(&Torrent::from("tests/lubuntu.torrent")?));
-        assert_eq!(6, client.torrents.len());
-        Ok(())
-    }*/
-
-    #[test]
-    fn load_torrents_from_path_to_directory_without_torrents_should_fail() -> Result<(), String> {
-        let config = Config::new()?;
-        let logger = Logger::new(config.log_path())?;
-        let mut client = ClientSide::new(&config, logger.handle());
-        let paths = vec!["src".to_string()];
-        assert!(client.load_torrents(paths).is_err());
         Ok(())
     }
 }

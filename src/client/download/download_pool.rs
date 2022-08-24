@@ -30,8 +30,7 @@ impl DownloadPool {
     pub fn new(
         client_id: [u8; 20],
         config: &Config,
-        torrent_tx: &TorrentSender,
-        torrent_rx_mutex: &TorrentReceiver,
+        (torrent_tx, torrent_rx_mutex): (&TorrentSender, &TorrentReceiver),
         downloaded_torrents: &DownloadedTorrents,
         notif_tx: Sender<Notification>,
         log_handle: &LogHandle,
@@ -43,12 +42,10 @@ impl DownloadPool {
                 id,
                 client_id,
                 config.torrent_time_slice(),
-                torrent_tx.clone(),
-                torrent_rx_mutex.clone(),
+                (torrent_tx.clone(), torrent_rx_mutex.clone()),
                 downloaded_torrents.clone(),
                 notif_tx.clone(),
                 log_handle.clone(),
-                config.get_tcp_port() as u32,
             ));
         }
 

@@ -11,17 +11,17 @@ impl UiNotification {
         self.torrents.push(torrent);
     }
 
-    pub fn get_state_by_torrent_name(&self, name: &str)->Option<TorrentState> {
+    pub fn get_state_by_torrent_name(&self, name: &str) -> Option<TorrentState> {
         let mut result: Option<TorrentState> = None;
-        for torrent in &self.torrents{
-            if torrent.get_metadata_name().eq(name){
+        for torrent in &self.torrents {
+            if torrent.get_metadata_name().eq(name) {
                 result = Some(torrent.clone());
             }
         }
         result
     }
 
-    pub fn get_torrent_states(&self)->Vec<TorrentState>{
+    pub fn get_torrent_states(&self) -> Vec<TorrentState> {
         self.torrents.clone()
     }
 }

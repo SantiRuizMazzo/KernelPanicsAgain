@@ -88,7 +88,7 @@ impl TorrentState {
     }
 
     pub fn get_completion_precentage(&self) -> f64 {
-        ((self.get_metadata_downloaded() as f64)/(self.get_metadata_n_pieces() as f64)) * 100.0
+        ((self.get_metadata_downloaded() as f64) / (self.get_metadata_n_pieces() as f64)) * 100.0
     }
 }
 

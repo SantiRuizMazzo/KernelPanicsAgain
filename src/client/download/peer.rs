@@ -11,7 +11,7 @@ use super::{
     download_pool::DownloadedPieces,
     peer_protocol::{self, ProtocolError},
 };
-use std::{net::TcpStream, time::Duration};
+use std::net::TcpStream;
 
 /// Stores information about each peer in the peer list that is provided by the tracker.
 #[derive(Debug)]
@@ -128,9 +128,9 @@ impl Peer {
             .log(&format!("Handshaked with: {}", self.address()))
             .map_err(ProtocolError::Peer)?;
         self.bitfield.set_size(torrent.total_pieces());
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .map_err(|e| ProtocolError::Peer(e.to_string()))?;
+        /*stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .map_err(|e| ProtocolError::Peer(e.to_string()))?;*/
         Ok(stream)
     }
 

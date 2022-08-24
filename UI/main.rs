@@ -3,12 +3,12 @@ pub mod main_window;
 use std::borrow::Borrow;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::collections::HashMap;
 
 use chrono::Local;
-use gtk::glib::{Sender, Receiver};
+use gtk::glib::{Receiver, Sender};
 use gtk::{glib, prelude::*, ApplicationWindow, Builder};
 
 use patk_bittorrent_client::ui_notification_structs::peer_state::PeerState;
@@ -33,13 +33,11 @@ pub struct UiGrid {
 }
 
 thread_local!(
-    static GLOBAL: std::cell::RefCell<Option<UiGrid>> =
-        RefCell::new(None);
+    static GLOBAL: std::cell::RefCell<Option<UiGrid>> = RefCell::new(None);
 );
 
 thread_local!(
-    static TORRENTS: std::cell::RefCell<Option<HashMap<String,TorrentState>>> =
-        RefCell::new(None);
+    static TORRENTS: std::cell::RefCell<Option<HashMap<String, TorrentState>>> = RefCell::new(None);
 );
 
 fn build_main_window(
@@ -83,14 +81,16 @@ fn build_general_information_grid(builder: Builder) -> gtk::Grid {
     }
 }
 
-fn build_statistics_information_grid(builder: Builder) ->  Result<gtk::Grid, String> {
-    let info_window: gtk::Grid = builder.object("info_window_statistics_grid").ok_or_else(|| "error".to_string())?;
-   
+fn build_statistics_information_grid(builder: Builder) -> Result<gtk::Grid, String> {
+    let info_window: gtk::Grid = builder
+        .object("info_window_statistics_grid")
+        .ok_or_else(|| "error".to_string())?;
+
     info_window.connect_delete_event(|info_window, _| {
         info_window.hide();
         gtk::Inhibit(true)
     });
-    Ok(info_window) 
+    Ok(info_window)
 }
 
 fn build_config_button(builder: Builder, dialog: gtk::Dialog) -> Result<(), String> {
@@ -121,81 +121,117 @@ fn build_file_chooser_window(builder: Builder) -> Result<gtk::Dialog, String> {
     Ok(dialog)
 }
 
-fn change_config(config_dialog_port: gtk::TextView, config_dialog_folder: gtk::TextView,
-                config_dialog_file: gtk::TextView, torrent_time_slice: gtk::TextView, max_download_connections: gtk::TextView,
-
-    ) -> Result<(), String>{
-    
-    
-    let mut tcp_port   = "".to_string();
+fn change_config(
+    config_dialog_port: gtk::TextView,
+    config_dialog_folder: gtk::TextView,
+    config_dialog_file: gtk::TextView,
+    torrent_time_slice: gtk::TextView,
+    max_download_connections: gtk::TextView,
+) -> Result<(), String> {
+    let mut tcp_port = "".to_string();
     let mut folder = "".to_string();
     let mut file = "".to_string();
     let mut slice = "".to_string();
     let mut connections = "".to_string();
-    
-    if let Some(tcp_aux) = config_dialog_port.buffer(){
-        match tcp_aux.text(tcp_aux.start_iter().borrow(), tcp_aux.end_iter().borrow(), false) {
+
+    if let Some(tcp_aux) = config_dialog_port.buffer() {
+        match tcp_aux.text(
+            tcp_aux.start_iter().borrow(),
+            tcp_aux.end_iter().borrow(),
+            false,
+        ) {
             Some(aux) => {
                 tcp_port = aux.to_string();
-            },
+            }
             None => todo!(),
         }
     }
 
-    if let Some(folder_aux) = config_dialog_folder.buffer(){
-        match folder_aux.text(folder_aux.start_iter().borrow(), folder_aux.end_iter().borrow(), false) {
+    if let Some(folder_aux) = config_dialog_folder.buffer() {
+        match folder_aux.text(
+            folder_aux.start_iter().borrow(),
+            folder_aux.end_iter().borrow(),
+            false,
+        ) {
             Some(aux) => {
                 folder = aux.to_string();
-            },
+            }
             None => todo!(),
         }
-    }  
+    }
 
-    if let Some(file_aux) = config_dialog_file.buffer(){
-        match file_aux.text(file_aux.start_iter().borrow(), file_aux.end_iter().borrow(), false) {
+    if let Some(file_aux) = config_dialog_file.buffer() {
+        match file_aux.text(
+            file_aux.start_iter().borrow(),
+            file_aux.end_iter().borrow(),
+            false,
+        ) {
             Some(aux) => {
                 file = aux.to_string();
-            },
+            }
             None => todo!(),
         }
     }
 
-    if let Some(slice_aux) = torrent_time_slice.buffer(){
-        match slice_aux.text(slice_aux.start_iter().borrow(), slice_aux.end_iter().borrow(), false) {
+    if let Some(slice_aux) = torrent_time_slice.buffer() {
+        match slice_aux.text(
+            slice_aux.start_iter().borrow(),
+            slice_aux.end_iter().borrow(),
+            false,
+        ) {
             Some(aux) => {
                 slice = aux.to_string();
-            },
+            }
             None => todo!(),
         }
     }
 
-    if let Some(connections_aux) = max_download_connections.buffer(){
-        match connections_aux.text(connections_aux.start_iter().borrow(), connections_aux.end_iter().borrow(), false) {
+    if let Some(connections_aux) = max_download_connections.buffer() {
+        match connections_aux.text(
+            connections_aux.start_iter().borrow(),
+            connections_aux.end_iter().borrow(),
+            false,
+        ) {
             Some(aux) => {
                 connections = aux.to_string();
-            },
+            }
             None => todo!(),
         }
     }
 
-    if tcp_port.is_empty(){
-        tcp_port = config_dialog_port.tooltip_text().ok_or("failed getting the tooltip text")?.to_string();
+    if tcp_port.is_empty() {
+        tcp_port = config_dialog_port
+            .tooltip_text()
+            .ok_or("failed getting the tooltip text")?
+            .to_string();
     }
 
-    if folder.is_empty(){
-        folder = config_dialog_folder.tooltip_text().ok_or("failed getting the tooltip text")?.to_string();
+    if folder.is_empty() {
+        folder = config_dialog_folder
+            .tooltip_text()
+            .ok_or("failed getting the tooltip text")?
+            .to_string();
     }
 
-    if file.is_empty(){
-        file = config_dialog_file.tooltip_text().ok_or("failed getting the tooltip text")?.to_string();
+    if file.is_empty() {
+        file = config_dialog_file
+            .tooltip_text()
+            .ok_or("failed getting the tooltip text")?
+            .to_string();
     }
 
-    if connections.is_empty(){
-        connections = max_download_connections.tooltip_text().ok_or("failed getting the tooltip text")?.to_string();
+    if connections.is_empty() {
+        connections = max_download_connections
+            .tooltip_text()
+            .ok_or("failed getting the tooltip text")?
+            .to_string();
     }
 
-    if slice.is_empty(){
-        slice = torrent_time_slice.tooltip_text().ok_or("failed getting the tooltip text")?.to_string();
+    if slice.is_empty() {
+        slice = torrent_time_slice
+            .tooltip_text()
+            .ok_or("failed getting the tooltip text")?
+            .to_string();
     }
 
     let new_config = format!(
@@ -204,8 +240,11 @@ fn change_config(config_dialog_port: gtk::TextView, config_dialog_folder: gtk::T
 
     let _ = std::fs::remove_file("config.txt");
 
-    if let Ok(mut file) = OpenOptions::new().write(true).create(true).open("config.txt") {
-        
+    if let Ok(mut file) = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open("config.txt")
+    {
         let _ = file.write_all(new_config.as_bytes());
     }
 
@@ -214,30 +253,31 @@ fn change_config(config_dialog_port: gtk::TextView, config_dialog_folder: gtk::T
 
 fn build_config_window(builder: Builder, config: Config) -> Result<gtk::Dialog, String> {
     let config_dialog_port: gtk::TextView = builder
-    .object("config_dialog_port")
-    .ok_or_else(|| "error".to_string())?;
+        .object("config_dialog_port")
+        .ok_or_else(|| "error".to_string())?;
     config_dialog_port.set_tooltip_text(Some(&format!("{}", config.get_tcp_port())));
 
     let config_dialog_folder: gtk::TextView = builder
-    .object("config_dialog_folder")
-    .ok_or_else(|| "error".to_string())?;
+        .object("config_dialog_folder")
+        .ok_or_else(|| "error".to_string())?;
     config_dialog_folder.set_tooltip_text(Some(&config.download_path()));
-    
+
     let config_dialog_file: gtk::TextView = builder
-    .object("config_dialog_file")
-    .ok_or_else(|| "error".to_string())?;
+        .object("config_dialog_file")
+        .ok_or_else(|| "error".to_string())?;
     config_dialog_file.set_tooltip_text(Some(&config.log_path()));
-    
+
     let torrent_time_slice: gtk::TextView = builder
-    .object("torrent_time_slice")
-    .ok_or_else(|| "error".to_string())?;
+        .object("torrent_time_slice")
+        .ok_or_else(|| "error".to_string())?;
     torrent_time_slice.set_tooltip_text(Some(&format!("{}", config.torrent_time_slice())));
-    
+
     let max_download_connections: gtk::TextView = builder
-    .object("max_download_connections")
-    .ok_or_else(|| "error".to_string())?;
-    max_download_connections.set_tooltip_text(Some(&format!("{}", config.get_max_download_connections())));
-    
+        .object("max_download_connections")
+        .ok_or_else(|| "error".to_string())?;
+    max_download_connections
+        .set_tooltip_text(Some(&format!("{}", config.get_max_download_connections())));
+
     let dialog: gtk::Dialog = builder
         .object("config_dialog")
         .ok_or_else(|| "error".to_string())?;
@@ -247,12 +287,18 @@ fn build_config_window(builder: Builder, config: Config) -> Result<gtk::Dialog, 
     });
 
     let change_config_button: gtk::Button = builder
-    .object("config_dialog_accept_button")
-    .ok_or_else(|| "error".to_string())?;
+        .object("config_dialog_accept_button")
+        .ok_or_else(|| "error".to_string())?;
 
     let dialog_clone = dialog.clone();
-    change_config_button.connect_clicked(move |_|{
-        let _ = change_config(config_dialog_port.clone(), config_dialog_folder.clone(), config_dialog_file.clone(), torrent_time_slice.clone(), max_download_connections.clone());
+    change_config_button.connect_clicked(move |_| {
+        let _ = change_config(
+            config_dialog_port.clone(),
+            config_dialog_folder.clone(),
+            config_dialog_file.clone(),
+            torrent_time_slice.clone(),
+            max_download_connections.clone(),
+        );
         dialog_clone.hide();
     });
 
@@ -303,7 +349,6 @@ pub fn update_torrent_grid_row(grid: gtk::Grid, name: String, text: f64) -> Resu
                         found_row = true;
                         continue;
                     } else if found_row {
-                        
                         break;
                     }
                 }
@@ -353,7 +398,8 @@ fn update_general_information_shown(
                 label.set_text(
                     (format!(
                         "{:x?}%",
-                        ((torrent_state.get_metadata_downloaded() * 100) as f64) / (torrent_state.get_metadata_n_pieces() as f64)
+                        ((torrent_state.get_metadata_downloaded() * 100) as f64)
+                            / (torrent_state.get_metadata_n_pieces() as f64)
                     ))
                     .borrow(),
                 );
@@ -380,13 +426,7 @@ fn update_statistics_shown(statistics_grid: gtk::Grid, peers: Vec<PeerState>, pi
         statistics_grid.attach(make_row_label(&msg).borrow(), 1, pos, 1, 1);
         pos += 1;
         msg = format!("peer port: {}", peer.get_port());
-        statistics_grid.attach(
-            make_row_label(&msg).borrow(),
-            1,
-            pos,
-            1,
-            1,
-        );
+        statistics_grid.attach(make_row_label(&msg).borrow(), 1, pos, 1, 1);
         pos += 1;
         msg = "Peer State: ".to_string();
         if peer.get_p_is_chocked() {
@@ -416,24 +456,27 @@ fn update_statistics_shown(statistics_grid: gtk::Grid, peers: Vec<PeerState>, pi
         pos += 1;
         let vel = peer.get_download_v(piece_size);
         msg = format!("download velocity: {vel:.2?} b/s");
-        statistics_grid.attach(
-            make_row_label(&msg).borrow(),
-            1,
-            pos,
-            1,
-            1,
-        );
-        
+        statistics_grid.attach(make_row_label(&msg).borrow(), 1, pos, 1, 1);
+
         pos += 2;
     }
 }
 
-fn set_up_info_window(torrent_name: &str){
+fn set_up_info_window(torrent_name: &str) {
     let statistics_grid = get_statistics_grid();
     let info_grid = get_general_info_grid();
     let torrent_state = get_torrent_from_hash_by_name(&(*<&str>::clone(&torrent_name)));
-    update_statistics_shown(statistics_grid, torrent_state.get_peers(), torrent_state.get_metadata_total_size()/torrent_state.get_metadata_n_pieces());
-    let _ = update_general_information_shown(info_grid, torrent_state.clone(), torrent_state.get_total_peers(),torrent_state.get_peers().len());
+    update_statistics_shown(
+        statistics_grid,
+        torrent_state.get_peers(),
+        torrent_state.get_metadata_total_size() / torrent_state.get_metadata_n_pieces(),
+    );
+    let _ = update_general_information_shown(
+        info_grid,
+        torrent_state.clone(),
+        torrent_state.get_total_peers(),
+        torrent_state.get_peers().len(),
+    );
 }
 
 fn make_row_button(torrent: &str) -> gtk::Button {
@@ -472,25 +515,29 @@ fn add_row_to_grid(grid: gtk::Grid, mut name: &str) {
     }
 }
 
-pub fn add_torrents_to_hash(states: Vec<TorrentState>){
+pub fn add_torrents_to_hash(states: Vec<TorrentState>) {
     let mut aux_hash: HashMap<String, TorrentState> = HashMap::new();
     TORRENTS.with(|torrents| {
         if let Some(torrent_hash) = &*torrents.borrow() {
             aux_hash.clone_from(torrent_hash);
-            for state in states{
+            for state in states {
                 let aux_grid = get_torrent_grid();
                 if !aux_hash.contains_key(&state.get_metadata_name()) {
                     add_row_to_grid(aux_grid.clone(), &state.get_metadata_name());
                 }
                 let _ = aux_hash.insert(state.get_metadata_name(), state.clone());
-                let _ = update_torrent_grid_row(aux_grid, state.get_metadata_name(), state.get_completion_precentage());
+                let _ = update_torrent_grid_row(
+                    aux_grid,
+                    state.get_metadata_name(),
+                    state.get_completion_precentage(),
+                );
             }
         }
         *torrents.borrow_mut() = Some(aux_hash);
     });
 }
 
-pub fn get_torrents_from_hash()->HashMap<String, TorrentState>{
+pub fn get_torrents_from_hash() -> HashMap<String, TorrentState> {
     let mut aux: HashMap<String, TorrentState> = HashMap::new();
     TORRENTS.with(|torrents| {
         if let Some(torrent_hash) = &*torrents.borrow() {
@@ -500,19 +547,17 @@ pub fn get_torrents_from_hash()->HashMap<String, TorrentState>{
     aux
 }
 
-pub fn get_torrent_from_hash_by_name(name: &str)->TorrentState{
+pub fn get_torrent_from_hash_by_name(name: &str) -> TorrentState {
     let mut aux: TorrentState = TorrentState::new(0);
     TORRENTS.with(|torrents| {
         if let Some(torrent_hash) = &*torrents.borrow() {
-            if let Some(torrent) = torrent_hash.get(<&str>::clone(&name)){
+            if let Some(torrent) = torrent_hash.get(<&str>::clone(&name)) {
                 aux = torrent.clone();
             }
         }
     });
     aux
 }
-
-
 
 pub fn get_general_info_grid() -> gtk::Grid {
     let mut aux: gtk::Grid = gtk::Grid::new();
@@ -578,7 +623,7 @@ pub fn add_event_callbacks(ui: &UiGrid, sender: mpsc::Sender<String>) {
 fn build_ui(
     application: &gtk::Application,
     sender: mpsc::Sender<String>,
-    config: Config
+    config: Config,
 ) -> Result<UiGrid, String> {
     let glade1_src = include_str!("view1.glade");
     let builder = Builder::from_string(glade1_src);
@@ -616,14 +661,13 @@ fn start_client_worker(receiver: mpsc::Receiver<String>, mut client: ClientSide)
 }
 
 fn main() -> Result<(), String> {
-    
-    let (updater_tx, updater_rx) : (Sender<UiNotification>, Receiver<UiNotification>) =
-    glib::MainContext::channel(gtk::glib::PRIORITY_DEFAULT);
+    let (updater_tx, updater_rx): (Sender<UiNotification>, Receiver<UiNotification>) =
+        glib::MainContext::channel(gtk::glib::PRIORITY_DEFAULT);
     let config_aux = Config::new()?;
     let config = Config::new()?;
     let logger = Logger::new(config.log_path())?;
     let (path_tx, path_rx) = mpsc::channel::<String>();
-        
+
     thread::spawn(move || {
         let application = gtk::Application::new(
             Some(&format!(
@@ -636,42 +680,40 @@ fn main() -> Result<(), String> {
             let ui_result = build_ui(app, path_tx.clone(), config_aux.clone());
             match ui_result {
                 Ok(ui) => {
-                    GLOBAL.with(|global|{
+                    GLOBAL.with(|global| {
                         *global.borrow_mut() = Some(ui);
                     });
-                },
+                }
                 Err(_) => todo!(),
             }
         });
-    
-            updater_rx.attach(None, move |notif|{
-                
-                let torrents = notif.get_torrent_states();
-                add_torrents_to_hash(torrents);
-                let info_winodw = get_info_window_handler();
-                set_up_info_window(info_winodw.widget_name().as_str());
-                gtk::glib::Continue(true)
-            });
+
+        updater_rx.attach(None, move |notif| {
+            let torrents = notif.get_torrent_states();
+            add_torrents_to_hash(torrents);
+            let info_winodw = get_info_window_handler();
+            set_up_info_window(info_winodw.widget_name().as_str());
+            gtk::glib::Continue(true)
+        });
         let code = application.run();
         std::process::exit(code)
     });
     let (notif_tx, notif_rx) = mpsc::channel();
-    
+
     let mut client = ClientSide::new(&config, logger.handle());
     let mut server = ServerSide::new(client.get_id(), &config, logger.handle());
-    
+
     server.set_peer_id(client.get_id());
     server.set_ui_sender(Some(updater_tx));
     server.init(notif_tx.clone(), notif_rx)?;
-    
+
     let _log_peer_id = format!(
         "Client Peer ID: {}",
         utils::bytes_to_string(&client.get_id())?
     );
-    
+
     let mut download_pool = client.init(notif_tx)?;
     start_client_worker(path_rx, client);
     download_pool.wait_for_workers();
     Ok(())
-
 }

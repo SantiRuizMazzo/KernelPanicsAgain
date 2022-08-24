@@ -89,7 +89,7 @@ mod tests {
     fn generate_correctly_configuration() -> Result<(), String> {
         let config = Config::new()?;
         assert_eq!(8081, config.tcp_port);
-        assert_eq!("downloads/", config.download_path);
+        assert_eq!("downloads", config.download_path);
         assert_eq!("log.txt", config.log_path);
         Ok(())
     }
