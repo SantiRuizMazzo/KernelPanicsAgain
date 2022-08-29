@@ -1,1 +1,1 @@
-# 22C1-Panic-At-the-Kernel
+Kernel panicking again? Didn't have enough?
