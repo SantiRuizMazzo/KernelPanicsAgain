@@ -11,10 +11,10 @@ use chrono::Local;
 use gtk::glib::{Receiver, Sender};
 use gtk::{glib, prelude::*, ApplicationWindow, Builder};
 
-use patk_bittorrent_client::ui_notification_structs::peer_state::PeerState;
-use patk_bittorrent_client::ui_notification_structs::torrent_state::TorrentState;
-use patk_bittorrent_client::ui_notification_structs::ui_notification::UiNotification;
-use patk_bittorrent_client::{
+use cli::ui_notification_structs::peer_state::PeerState;
+use cli::ui_notification_structs::torrent_state::TorrentState;
+use cli::ui_notification_structs::ui_notification::UiNotification;
+use cli::{
     client::client_side::ClientSide, config::Config, logging::logger::Logger,
     server::server_side::ServerSide, utils,
 };
@@ -369,7 +369,7 @@ fn make_row_label(name: &str) -> gtk::Label {
 
 fn update_general_information_shown(
     info_grid: gtk::Grid,
-    torrent_state: patk_bittorrent_client::ui_notification_structs::torrent_state::TorrentState,
+    torrent_state: cli::ui_notification_structs::torrent_state::TorrentState,
     n_peers: usize,
     active_peers: usize,
 ) -> Result<(), gtk::Widget> {
