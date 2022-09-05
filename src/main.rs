@@ -1,8 +1,5 @@
-use cli::torrent_client::run;
+use cli::bittorrent_engine;
 
-fn main() {
-    match run() {
-        Ok(()) => println!("Successful download 😎🤙"),
-        Err(error) => println!("{error}"),
-    }
+fn main() -> Result<(), String> {
+    bittorrent_engine::run()
 }
