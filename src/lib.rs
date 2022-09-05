@@ -1,4 +1,4 @@
-mod bdecoding;
+mod bdecoder;
 pub mod bittorrent_engine;
 pub mod client;
 pub mod config;

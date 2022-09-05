@@ -1,6 +1,6 @@
 use super::{
     super::{
-        bdecoding::{BDecoder, BType},
+        bdecoder::{BDecoder, BType},
         utils,
     },
     download::peer::Peer,

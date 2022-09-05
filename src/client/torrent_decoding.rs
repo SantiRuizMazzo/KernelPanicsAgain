@@ -1,6 +1,6 @@
 use super::{
     super::{
-        bdecoding::{BDecoder, BType},
+        bdecoder::{BDecoder, BType},
         utils,
     },
     single_file::SingleFile,
